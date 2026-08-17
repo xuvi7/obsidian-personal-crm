@@ -1,7 +1,7 @@
 {
   "id": "personal-crm",
   "name": "Personal CRM",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "minAppVersion": "1.13.0",
   "description": "Keep in touch on purpose. Derives contact history from links in your dated notes, tracks a cadence per person, and tells you who to reach out to.",
   "author": "xuvi",
