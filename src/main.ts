@@ -214,14 +214,28 @@ export default class PrmPlugin extends Plugin {
 		}
 	}
 
-	async detectJournalSources(): Promise<boolean> {
+	/**
+	 * Fill in the folders from what the vault already knows: Daily/Periodic Notes
+	 * for the dated folders, and a likely-looking folder name for people.
+	 *
+	 * Only fills what is empty — it should never overwrite a choice already made.
+	 */
+	async detectFromVault(): Promise<{ sources: number; people: string | null }> {
 		const sources = detectJournalSources(this.app);
-		if (sources.length === 0) return false;
-		this.settings.journalSources = sources;
+		if (sources.length > 0 && this.settings.journalSources.length === 0) {
+			this.settings.journalSources = sources;
+		}
+
+		let people: string | null = null;
+		if (this.settings.personFolders.length === 0) {
+			people = detectPeopleFolder(this.app);
+			if (people) this.settings.personFolders = [people];
+		}
+
 		await this.saveData(this.settings);
 		this.engine.rebuild();
 		this.refreshStatusBar();
-		return true;
+		return { sources: sources.length, people };
 	}
 
 	/** Frontmatter for a person note, for the import planner. */

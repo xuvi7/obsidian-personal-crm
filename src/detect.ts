@@ -124,15 +124,7 @@ export function detectJournalSources(app: App): JournalSource[] {
 	return out;
 }
 
-const PEOPLE_FOLDER_NAMES = [
-	"people",
-	"contacts",
-	"persons",
-	"person",
-	"friends",
-	"humans",
-	"who",
-];
+const PEOPLE_FOLDER_NAMES = ["people", "contacts", "persons", "person", "friends"];
 
 /**
  * Guess the people folder by name, preferring the shallowest match so a nested

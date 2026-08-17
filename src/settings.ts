@@ -25,7 +25,7 @@ export interface PrmSettings {
 	personTypeValue: string;
 	/** Only treat notes in the person folders as people if they also carry a tag/type. */
 	requireTagOrType: boolean;
-	/** Basename fragments that are never people (templates, MOCs, indexes). */
+	/** Basename fragments that are never people, e.g. templates. */
 	personExclusions: string[];
 
 	/** Folder new person notes are created in. Empty = the first people folder. */
@@ -73,30 +73,22 @@ export interface PrmSettings {
 }
 
 export const DEFAULT_SETTINGS: PrmSettings = {
-	personFolders: ["People"],
+	personFolders: [],
 	personTags: [],
 	personTypeKey: "",
 	personTypeValue: "",
 	requireTagOrType: false,
-	personExclusions: ["template", "MOC", "index", "dashboard", "untitled"],
+	personExclusions: ["template", "templates", "untitled", "index", "MOC"],
 
 	newPersonFolder: "",
 	newPersonTemplate: "",
 	newPersonTier: "",
 
-	journalSources: [{ folder: "Daily Notes", format: "YYYY-MM-DD" }],
+	journalSources: [],
 	allowFallbackDateFormats: true,
 	journalDateKey: "date",
 
-	createdDateKeys: [
-		"created",
-		"Created",
-		"creation date",
-		"creation-date",
-		"date created",
-		"date-created",
-		"ctime",
-	],
+	createdDateKeys: ["created", "Created", "date created", "date-created", "ctime"],
 
 	tiers: [
 		{ id: "inner", label: "Inner circle", cadenceDays: 14, color: "#e0567a" },
@@ -337,9 +329,18 @@ export class PrmSettingTab extends PluginSettingTab {
 				line(`These folders don't exist: ${d.missingFolders.join(", ")}`, true);
 			}
 			if (d.personFilesFound === 0) {
+				// Nothing configured is the shipped default, so distinguish it from a
+				// setting that is filled in but matching nothing.
+				const s = this.plugin.settings;
+				const nothingSet =
+					s.personFolders.length === 0 &&
+					s.personTags.length === 0 &&
+					s.personTypeKey.length === 0;
 				frag.createDiv({
 					cls: "prm-diag-hint",
-					text: "Nothing matched. Check the people folders below.",
+					text: nothingSet
+						? "Nothing is set up yet — use Detect folders from your vault, or name a people folder below."
+						: "Nothing matched. Check the people folders below.",
 				});
 			} else if (d.journalFilesScanned > 0 && d.journalFilesDated === 0) {
 				frag.createDiv({
@@ -386,7 +387,7 @@ export class PrmSettingTab extends PluginSettingTab {
 				},
 				{
 					name: "Never treat these as people",
-					desc: "Comma-separated fragments matched against the note title, case-insensitive.",
+					desc: "Comma-separated. Matched as whole words against the note title, case-insensitive — so MOC excludes “People MOC” but not “Mochizuki”.",
 					aliases: ["exclude", "template", "ignore"],
 					control: {
 						type: "text",
@@ -499,17 +500,20 @@ export class PrmSettingTab extends PluginSettingTab {
 					},
 				},
 				{
-					name: "Detect from Daily Notes",
-					desc: "Read the folder and date format from Periodic Notes or core Daily Notes.",
-					aliases: ["periodic notes", "autodetect"],
+					name: "Detect folders from your vault",
+					desc: "Reads the dated folder and date format from Periodic Notes or core Daily Notes, and looks for a likely people folder. Only fills in what you've left empty.",
+					aliases: ["periodic notes", "daily notes", "autodetect", "setup"],
 					action: () => {
 						void (async () => {
-							const found = await this.plugin.detectJournalSources();
+							const found = await this.plugin.detectFromVault();
 							this.update();
+							const parts: string[] = [];
+							if (found.sources > 0) parts.push("dated notes");
+							if (found.people) parts.push(`people in "${found.people}"`);
 							new Notice(
-								found
-									? "Picked up your daily note folder and format."
-									: "Couldn't find Daily Notes or Periodic Notes settings.",
+								parts.length > 0
+									? `Found ${parts.join(" and ")}.`
+									: "Nothing to detect — set the folders below by hand.",
 							);
 						})();
 					},

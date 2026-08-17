@@ -293,11 +293,7 @@ export class PrmEngine {
 		const tags = cache ? (getAllTags(cache) ?? []) : [];
 		if (tags.some((t) => t.toLowerCase() === "#excalidraw")) return true;
 
-		const name = file.basename.toLowerCase();
-		for (const fragment of this.settings.personExclusions) {
-			const f = fragment.trim().toLowerCase();
-			if (f.length > 0 && name.includes(f)) return true;
-		}
+		if (matchesAnyExclusion(file.basename, this.settings.personExclusions)) return true;
 
 		// An unrendered template placeholder means this is a template, not a person.
 		for (const value of Object.values(fm)) {
@@ -481,6 +477,43 @@ export class PrmEngine {
 
 		record.status = deriveStatus(record, today, this.settings.dueSoonWindowDays);
 	}
+}
+
+/** Split a title into word tokens, so matching can't cut across word boundaries. */
+function nameTokens(value: string): string[] {
+	return value
+		.toLowerCase()
+		.split(/[^\p{L}\p{N}]+/u)
+		.filter((t) => t.length > 0);
+}
+
+/**
+ * Does an exclusion fragment appear in this title as whole words?
+ *
+ * Substring matching looked equivalent and was not: "MOC" is inside "Mochizuki"
+ * and "index" is inside "Indexa", so real people were being silently dropped from
+ * the index with no explanation. A fragment of several words has to appear as a
+ * consecutive run of tokens.
+ */
+function matchesAnyExclusion(basename: string, exclusions: string[]): boolean {
+	const tokens = nameTokens(basename);
+	if (tokens.length === 0) return false;
+
+	for (const raw of exclusions) {
+		const wanted = nameTokens(raw);
+		if (wanted.length === 0) continue;
+		for (let i = 0; i + wanted.length <= tokens.length; i++) {
+			let all = true;
+			for (let j = 0; j < wanted.length; j++) {
+				if (tokens[i + j] !== wanted[j]) {
+					all = false;
+					break;
+				}
+			}
+			if (all) return true;
+		}
+	}
+	return false;
 }
 
 interface PersonLinkMap {

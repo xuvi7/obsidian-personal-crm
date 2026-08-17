@@ -5,6 +5,18 @@ All notable changes to Personal CRM. Versions follow
 
 ## Unreleased
 
+### Changed
+
+- **No default now assumes a particular vault's layout.** The people folder and the
+  dated-note folders ship empty rather than guessing at names, so an unconfigured
+  install says "Nothing is set up yet" instead of reporting a folder the user never
+  chose as missing. First-run detection, and a *Detect folders from your vault*
+  action, fill them in from Daily Notes or Periodic Notes plus a likely people
+  folder — and only ever fill what has been left empty.
+- The creation-date fields no longer include `creation date`, which came from one
+  vault's template rather than any general convention. Existing settings are
+  untouched: a persisted value always wins over a default.
+
 ### Added
 
 - **Create a person note** from the command palette, with three new settings —
@@ -24,6 +36,10 @@ All notable changes to Personal CRM. Versions follow
 
 ### Fixed
 
+- **A real name containing an exclusion word was silently dropped.** Exclusions were
+  matched as substrings, so "MOC" hid anyone called Mochizuki and "index" hid
+  Indexa. They are now matched as whole words, which also makes a broader default
+  list safe.
 - **Rebuild index now reports what it found** — "239 people · 1897/1897 dated
   notes · 2877 interactions · 50ms" — instead of appearing to do nothing. It was
   re-deriving the index correctly, but since the index already updates itself as

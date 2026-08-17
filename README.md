@@ -46,10 +46,14 @@ A *completed* task (`- [x] called Sam`) does count.
 
 ## Setup
 
-Enable the plugin. On first run it reads your Daily Notes or Periodic Notes
-configuration for the folder and date format, and looks for a folder named
-People, Contacts, Friends or similar. Check what it found in settings — the
-diagnostics box at the top shows real counts:
+Enable the plugin. Nothing is guessed: no folder names are assumed. On first run it
+reads your Daily Notes or Periodic Notes configuration for the dated folder and its
+format, and looks for a folder named People, Contacts, Friends or similar. If it
+finds nothing, the Status block says so and *Detect folders from your vault* will
+try again at any time.
+
+Check what it found in settings — the Status box at the top shows real counts and
+refreshes itself as the index changes:
 
 > 43 people found · 1,204 notes in your dated folders, 1,204 with a readable date
 > · 2,310 interactions derived · indexed in 3ms
@@ -73,9 +77,10 @@ Any combination of:
 | Frontmatter | `Person frontmatter marker` — e.g. key `type`, value `person` |
 
 Tags and frontmatter markers find people anywhere in the vault, so a vault
-organised by area rather than by type works fine. Templates, MOCs and index notes
-are excluded by title fragment, and notes with unrendered `{{placeholders}}` are
-skipped.
+organised by area rather than by type works fine. Notes titled as templates, MOCs,
+indexes or Untitled are excluded, matched **as whole words** so a real surname like
+Mochizuki isn't mistaken for a MOC. Notes with unrendered `{{placeholders}}` are
+skipped too.
 
 ## Adding people
 
