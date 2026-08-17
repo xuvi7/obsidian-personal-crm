@@ -624,7 +624,7 @@ export default class PrmPlugin extends Plugin {
 	 */
 	private async appendBodyLog(file: TFile, date: string, note?: string): Promise<void> {
 		const heading = this.settings.bodyLogHeading;
-		const entry = note ? `- ${this.dateToken(date)} — ${note}` : `- ${this.dateToken(date)}`;
+		const entry = this.logEntry(date, note);
 		const target = heading.trim().toLowerCase();
 
 		const cache = this.app.metadataCache.getFileCache(file);
@@ -643,6 +643,24 @@ export default class PrmPlugin extends Plugin {
 			const separator = data.length === 0 || data.endsWith("\n") ? "" : "\n";
 			return `${data}${separator}\n## ${heading}\n${entry}\n`;
 		});
+	}
+
+	/**
+	 * One log entry: a dated bullet, plus the note if there is one.
+	 *
+	 * A multi-line note is indented to the bullet's text column so every line stays
+	 * inside the same list item — otherwise the second line would terminate the
+	 * list and render as body text. Blank lines are kept (as indented whitespace) so
+	 * paragraph breaks survive.
+	 */
+	private logEntry(date: string, note?: string): string {
+		const bullet = `- ${this.dateToken(date)}`;
+		const text = (note ?? "").trim();
+		if (text.length === 0) return bullet;
+
+		const [first, ...rest] = text.split(/\r?\n/);
+		const indented = rest.map((line) => (line.trim().length === 0 ? "  " : `  ${line}`));
+		return [`${bullet} — ${first}`, ...indented].join("\n");
 	}
 
 	/**

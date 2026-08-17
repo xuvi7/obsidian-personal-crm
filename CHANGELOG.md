@@ -3,6 +3,25 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Changed
+
+- **The note field when logging contact is now a full-width, resizable text box**
+  rather than a single-line input, so there's room to write something worth
+  reading back. Line breaks are preserved: a multi-line note is indented to the
+  bullet's text column so every line stays inside the same log entry instead of
+  the second line breaking out of the list.
+- **The reach-out flow has a note box too.** Whatever you write is saved with the
+  contact when you press *Logged it*, and drafts are kept per person while you
+  move back and forth through the queue, so navigating away doesn't lose typing.
+  ⌘/Ctrl+Enter logs without reaching for the mouse.
+
+### Fixed
+
+- Arrow keys no longer jump between people while the caret is in a text field —
+  the reach-out shortcuts now stand aside when you're typing.
+
 ## 1.2.1 — 2026-08-17
 
 ### Fixed
