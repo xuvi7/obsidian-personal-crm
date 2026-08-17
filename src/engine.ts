@@ -164,6 +164,7 @@ export class PrmEngine {
 
 		diag.missingFolders = this.missingFolders();
 		diag.buildMs = performance.now() - started;
+		diag.built = true;
 
 		this.index = people;
 		this.diag = diag;
@@ -588,6 +589,7 @@ function normalizeAliases(value: unknown): string[] {
 
 function emptyDiagnostics(): PrmDiagnostics {
 	return {
+		built: false,
 		personFilesFound: 0,
 		personFilesSkipped: 0,
 		journalFilesScanned: 0,

@@ -1,6 +1,7 @@
 import {
 	App,
 	Notice,
+	debounce,
 	PluginSettingTab,
 	SettingDefinitionItem,
 	SettingDefinitionPage,
@@ -161,7 +162,28 @@ const CSV_KEYS: Record<string, "personTags" | "personExclusions" | "createdDateK
 export class PrmSettingTab extends PluginSettingTab {
 	constructor(app: App, private plugin: PrmPlugin) {
 		super(app, plugin);
+
+		// The Status block is derived from the index, but getSettingDefinitions()
+		// only runs when the tab opens or update() is called. Without this it shows
+		// whatever was true at open time — including all zeros, since the first
+		// build is deferred off Obsidian's startup frame.
+		plugin.register(plugin.engine.onChange(() => this.refreshIfVisible()));
 	}
+
+	/** Re-read the definitions, but never out from under someone's cursor. */
+	private refreshIfVisible = debounce(
+		() => {
+			if (!this.containerEl.isShown()) return;
+			const active = activeDocument.activeElement;
+			const editing =
+				(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) &&
+				this.containerEl.contains(active);
+			if (editing) return;
+			this.update();
+		},
+		300,
+		true,
+	);
 
 	// ------------------------------------------------------------- value routing
 
@@ -271,6 +293,14 @@ export class PrmSettingTab extends PluginSettingTab {
 	private statusDefinition(): SettingDefinitionItem {
 		const d = this.plugin.engine.diagnostics();
 		const stats = this.plugin.engine.stats();
+
+		if (!d.built) {
+			return {
+				name: "Status",
+				desc: "Still indexing — this updates on its own in a moment.",
+				aliases: ["diagnostics", "counts", "troubleshooting"],
+			};
+		}
 
 		const desc = createFragment((frag) => {
 			const line = (text: string, bad = false) => {

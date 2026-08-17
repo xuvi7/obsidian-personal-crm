@@ -73,6 +73,8 @@ export interface PrmStats {
  * simply has no one to contact.
  */
 export interface PrmDiagnostics {
+	/** False until the first index build completes. */
+	built: boolean;
 	personFilesFound: number;
 	personFilesSkipped: number;
 	journalFilesScanned: number;
