@@ -3,7 +3,7 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 1.3.0 — 2026-08-17
 
 ### Changed
 - **The note preview is a bounded, scrollable box again.** It was growing to the
