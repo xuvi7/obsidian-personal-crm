@@ -9,9 +9,9 @@ import {
 import { PrmEngine } from "./engine";
 import { PRM_VIEW_TYPE, PrmDashboardView } from "./view";
 import {
+	CreatePersonModal,
 	LogContactModal,
 	PersonPickerModal,
-	PromptModal,
 	ReachOutModal,
 	SnoozeModal,
 	TierPickerModal,
@@ -328,18 +328,8 @@ export default class PrmPlugin extends Plugin {
 
 		this.addCommand({
 			id: "create-person",
-			name: "Create a person note…",
-			callback: () => {
-				new PromptModal(
-					this.app,
-					"Who is it?",
-					"",
-					async (name) => {
-						if (name.trim().length === 0) return;
-						await this.createPerson(name.trim(), { open: true });
-					},
-				).open();
-			},
+			name: "Add a person…",
+			callback: () => this.openCreatePerson(),
 		});
 
 		this.addCommand({
@@ -428,6 +418,10 @@ export default class PrmPlugin extends Plugin {
 
 	openContactImport(): void {
 		new ContactImportModal(this).open();
+	}
+
+	openCreatePerson(): void {
+		new CreatePersonModal(this).open();
 	}
 
 	// -------------------------------------------------------- creating people

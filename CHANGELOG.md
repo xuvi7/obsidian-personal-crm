@@ -3,6 +3,17 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **An "Add person" button in the dashboard header**, and the same dialog offered
+  from the empty states — previously creating a person was only reachable through
+  the command palette, which is easy to miss.
+- The dialog asks for the tier alongside the name. A person with no tier isn't
+  tracked at all, so creating one without asking would quietly produce someone the
+  plugin ignores.
+
 ## 1.4.0 — 2026-08-17
 
 ### Changed

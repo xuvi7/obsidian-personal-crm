@@ -144,6 +144,12 @@ export class PrmDashboardView extends ItemView {
 		reachOut.createSpan({ text: "Reach out" });
 		reachOut.onclick = () => this.plugin.startReachOutSession();
 
+		const add = buttons.createEl("button", { cls: "prm-header-btn" });
+		setIcon(add.createSpan({ cls: "prm-action-icon" }), "user-plus");
+		add.createSpan({ text: "Add person" });
+		add.setAttribute("aria-label", "Add a person");
+		add.onclick = () => this.plugin.openCreatePerson();
+
 		const triage = buttons.createEl("button", { text: "Triage" });
 		triage.onclick = () => this.plugin.startTriage();
 
@@ -286,9 +292,11 @@ export class PrmDashboardView extends ItemView {
 				text:
 					d.missingFolders.length > 0
 						? `These folders don't exist: ${d.missingFolders.join(", ")}. Set the right ones in settings.`
-						: "Point the plugin at the folder holding your person notes in settings.",
+						: "Point the plugin at the folder holding your person notes, or add someone to start.",
 			});
-			this.settingsLink(empty);
+			const row = empty.createDiv({ cls: "prm-empty-actions" });
+			this.addPersonButton(row);
+			this.settingsLink(row);
 			return;
 		}
 
@@ -314,6 +322,7 @@ export class PrmDashboardView extends ItemView {
 				break;
 			case "unclassified":
 				empty.createEl("p", { text: "Everyone has been classified." });
+				this.addPersonButton(empty.createDiv({ cls: "prm-empty-actions" }));
 				break;
 			case "birthdays":
 				empty.createEl("p", { text: "No birthdays recorded yet." });
@@ -330,8 +339,15 @@ export class PrmDashboardView extends ItemView {
 		}
 	}
 
+	private addPersonButton(parent: HTMLElement): void {
+		const btn = parent.createEl("button", { cls: "prm-primary-btn" });
+		setIcon(btn.createSpan({ cls: "prm-action-icon" }), "user-plus");
+		btn.createSpan({ text: "Add a person" });
+		btn.onclick = () => this.plugin.openCreatePerson();
+	}
+
 	private settingsLink(parent: HTMLElement): void {
-		const btn = parent.createEl("button", { text: "Open settings", cls: "prm-primary-btn" });
+		const btn = parent.createEl("button", { text: "Open settings" });
 		btn.onclick = () => {
 			// Obsidian exposes the settings modal on the app object.
 			const app = this.app as unknown as {

@@ -848,3 +848,19 @@
 .prm-unmatched-actions button {
 	font-size: var(--font-ui-smaller);
 }
+
+/* ------------------------------------------------------- add-person affordances */
+
+.prm-header-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+
+.prm-empty-actions {
+	display: flex;
+	gap: 0.5rem;
+	justify-content: center;
+	margin-top: 0.9rem;
+	flex-wrap: wrap;
+}

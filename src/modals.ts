@@ -376,6 +376,101 @@ export class SnoozeModal extends SuggestModal<SnoozeChoice> {
 	}
 }
 
+// ----------------------------------------------------------- create person modal
+
+/**
+ * Add a person, with their cadence set in the same step.
+ *
+ * Asking for the tier here matters: a person with no tier isn't tracked, so
+ * creating one without it would quietly produce someone the plugin ignores.
+ */
+export class CreatePersonModal extends Modal {
+	private name = "";
+	private tierId: string;
+	private createButton: HTMLButtonElement | null = null;
+	private error: HTMLElement | null = null;
+
+	constructor(
+		private plugin: PrmPlugin,
+		private onCreated?: (file: TFile) => void,
+	) {
+		super(plugin.app);
+		this.tierId = plugin.settings.newPersonTier;
+	}
+
+	onOpen(): void {
+		this.titleEl.setText("Add a person");
+		const { contentEl } = this;
+		contentEl.addClass("prm-log-modal");
+
+		const folder = this.plugin.newPersonFolder();
+		contentEl.createEl("p", {
+			cls: "prm-muted",
+			text: folder.length > 0 ? `A new note in ${folder}.` : "A new note in the vault root.",
+		});
+
+		new Setting(contentEl).setName("Name").addText((t) => {
+			t.setPlaceholder("Their name").onChange((v) => {
+				this.name = v;
+				this.validate();
+			});
+			t.inputEl.addEventListener("keydown", (evt) => {
+				if (evt.key === "Enter") {
+					evt.preventDefault();
+					void this.submit();
+				}
+			});
+			window.setTimeout(() => t.inputEl.focus(), 0);
+			return t;
+		});
+
+		this.error = contentEl.createDiv({ cls: "prm-form-error" });
+
+		new Setting(contentEl)
+			.setName("Contact every")
+			.setDesc("Nobody is tracked without a tier.")
+			.addDropdown((d) => {
+				d.addOption("", "Not yet — leave unclassified");
+				for (const tier of this.plugin.settings.tiers) {
+					d.addOption(tier.id, `${tier.label} — every ${formatDuration(tier.cadenceDays)}`);
+				}
+				d.setValue(this.tierId).onChange((v) => (this.tierId = v));
+				return d;
+			});
+
+		new Setting(contentEl)
+			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
+			.addButton((b) => {
+				b.setButtonText("Create").setCta().onClick(() => void this.submit());
+				this.createButton = b.buttonEl;
+				return b;
+			});
+
+		this.validate();
+	}
+
+	private validate(): void {
+		const ok = this.name.trim().length > 0;
+		if (this.createButton) this.createButton.disabled = !ok;
+		if (this.error) this.error.setText("");
+	}
+
+	private async submit(): Promise<void> {
+		const name = this.name.trim();
+		if (name.length === 0) return;
+		this.close();
+		const result = await this.plugin.createPerson(name, {
+			tierId: this.tierId,
+			open: true,
+		});
+		if (result) this.onCreated?.(result.file);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 // ---------------------------------------------------------------- confirm modal
 
 /**

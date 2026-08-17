@@ -84,8 +84,10 @@ skipped too.
 
 ## Adding people
 
-**Create a person note…** makes a note in the folder you nominate, optionally from
-a template, and can assign a tier so the person is tracked straight away. Three
+**Add person** in the dashboard header — or **Add a person…** from the command
+palette — makes a note in the folder you nominate, optionally from a template, and
+asks for the tier in the same step so the person is tracked immediately rather than
+sitting unclassified. Three
 settings under *Creating new people* control it:
 
 | Setting | Meaning |
