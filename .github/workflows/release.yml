@@ -50,6 +50,15 @@ jobs:
             }
           "
 
+      - name: Extract this version's release notes
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          # Fails the build if the version has no changelog entry, which is
+          # deliberate: a release without notes isn't ready.
+          node scripts/changelog-section.mjs "$TAG" > "$RUNNER_TEMP/release-notes.md"
+          wc -c < "$RUNNER_TEMP/release-notes.md"
+
       - run: npm run typecheck
       - run: npm run lint
 
@@ -66,13 +75,17 @@ jobs:
             dist/styles.css
             dist/manifest.json
 
-      - name: Attach assets to the release
+      - name: Publish the release and attach assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "$TAG" --notes-file CHANGELOG.md
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Set the notes on re-runs too, not only on first creation.
+            gh release edit "$TAG" --notes-file "$NOTES"
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file "$NOTES"
           fi
           gh release upload "$TAG" \
             dist/main.js dist/manifest.json dist/styles.css --clobber

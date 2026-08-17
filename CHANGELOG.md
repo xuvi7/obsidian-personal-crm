@@ -3,6 +3,14 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- Release notes contained the entire changelog rather than the section for the
+  version being released. The workflow now extracts just that version's section,
+  and fails before building if the version has no changelog entry at all.
+
 ## 1.3.0 — 2026-08-17
 
 ### Changed
