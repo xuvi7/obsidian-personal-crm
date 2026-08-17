@@ -1,4 +1,5 @@
 import type { PersonRecord } from "./types";
+import { asText } from "./frontmatter";
 
 /** A contact from an external source, normalized to the fields we care about. */
 export interface ExternalContact {
@@ -562,11 +563,13 @@ export function matchContacts(
 export function asDisplay(value: unknown): string | null {
 	if (value == null) return null;
 	if (Array.isArray(value)) {
-		const joined = value.map((v) => String(v)).filter((v) => v.length > 0);
+		const joined = value
+			.map((v) => asText(v))
+			.filter((v): v is string => v !== null && v.length > 0);
 		return joined.length > 0 ? joined.join(", ") : null;
 	}
-	const s = String(value).trim();
-	return s.length > 0 ? s : null;
+	const s = asText(value)?.trim();
+	return s !== undefined && s.length > 0 ? s : null;
 }
 
 /**
@@ -620,10 +623,11 @@ export function planChanges(
 				: "aliases";
 		const currentRaw = existing[aliasKey];
 		const current = Array.isArray(currentRaw)
-			? currentRaw.map((v) => String(v))
-			: currentRaw
-				? [String(currentRaw)]
-				: [];
+			? currentRaw.map((v) => asText(v)).filter((v): v is string => v !== null)
+			: ((): string[] => {
+					const one = asText(currentRaw);
+					return one === null ? [] : [one];
+				})();
 		const already = current.some((a) => normalizeName(a) === normalizeName(nickname));
 		if (!already && normalizeName(nickname).length > 0) {
 			changes.push({

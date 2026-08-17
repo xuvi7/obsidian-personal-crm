@@ -1,0 +1,78 @@
+name: Release
+
+# Builds the plugin from source on a version tag and attaches signed artifacts.
+# Building in CI rather than uploading a local build is what makes the
+# attestation meaningful: it proves the assets came from this commit.
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach assets to"
+        required: true
+
+permissions:
+  contents: write      # create/update the release and upload assets
+  id-token: write      # required to mint the attestation
+  attestations: write  # required to record it
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify the tag matches manifest.json
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          MANIFEST=$(node -p "require('./manifest.json').version")
+          if [ "$TAG" != "$MANIFEST" ]; then
+            echo "Tag '$TAG' does not match manifest version '$MANIFEST'." >&2
+            echo "Obsidian looks releases up by the exact version string, so these must agree." >&2
+            exit 1
+          fi
+          node -e "
+            const v = require('./versions.json'), m = require('./manifest.json');
+            if (v[m.version] !== m.minAppVersion) {
+              console.error('versions.json disagrees with manifest minAppVersion');
+              process.exit(1);
+            }
+          "
+
+      - run: npm run typecheck
+      - run: npm run lint
+
+      - name: Build
+        run: |
+          PRM_OUT_DIR="$PWD/dist" node esbuild.config.mjs production
+          ls -l dist
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/main.js
+            dist/styles.css
+            dist/manifest.json
+
+      - name: Attach assets to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --notes-file CHANGELOG.md
+          fi
+          gh release upload "$TAG" \
+            dist/main.js dist/manifest.json dist/styles.css --clobber

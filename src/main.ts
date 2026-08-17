@@ -23,6 +23,7 @@ import { detectJournalSources, detectPeopleFolder } from "./detect";
 import { formatDuration, isISODate, todayISO } from "./dates";
 import type { PersonRecord } from "./types";
 import { asDisplay, ImportOptions, PersonPlan } from "./contacts";
+import { frontmatterOf, MutableFrontmatter } from "./frontmatter";
 
 interface WriteOptions {
 	silent?: boolean;
@@ -109,8 +110,10 @@ export default class PrmPlugin extends Plugin {
 	// ------------------------------------------------------------------- settings
 
 	async loadSettings(): Promise<void> {
-		const stored = (await this.loadData()) as Partial<PrmSettings> | null;
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, stored ?? {});
+		const raw: unknown = await this.loadData();
+		const stored: Record<string, unknown> =
+			typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+		this.settings = { ...DEFAULT_SETTINGS, ...(stored as Partial<PrmSettings>) };
 
 		// Repair anything a hand-edited or older data.json might have dropped.
 		if (!Array.isArray(this.settings.tiers) || this.settings.tiers.length === 0) {
@@ -140,20 +143,17 @@ export default class PrmPlugin extends Plugin {
 		}
 
 		// Migrate the pre-1.1 shape, which had a single folder and no formats.
-		const legacy = stored as Record<string, unknown> | null;
-		if (legacy) {
-			const oldPeople = legacy["peopleFolder"];
-			if (typeof oldPeople === "string" && oldPeople.length > 0 && !stored?.personFolders) {
-				this.settings.personFolders = [cleanFolderPath(oldPeople)];
-			}
-			const oldJournals = legacy["journalFolders"];
-			if (Array.isArray(oldJournals) && !stored?.journalSources) {
-				this.settings.journalSources = oldJournals
-					.map((f) => cleanFolderPath(String(f)))
-					.filter((f) => f.length > 0)
-					.map((folder) => ({ folder, format: "YYYY-MM-DD" }));
-				this.settings.configured = true;
-			}
+		const oldPeople = stored["peopleFolder"];
+		if (typeof oldPeople === "string" && oldPeople.length > 0 && !stored["personFolders"]) {
+			this.settings.personFolders = [cleanFolderPath(oldPeople)];
+		}
+		const oldJournals = stored["journalFolders"];
+		if (Array.isArray(oldJournals) && !stored["journalSources"]) {
+			this.settings.journalSources = oldJournals
+				.map((f) => cleanFolderPath(String(f)))
+				.filter((f) => f.length > 0)
+				.map((folder) => ({ folder, format: "YYYY-MM-DD" }));
+			this.settings.configured = true;
 		}
 	}
 
@@ -220,8 +220,7 @@ export default class PrmPlugin extends Plugin {
 	frontmatterFor(path: string): Record<string, unknown> {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile)) return {};
-		const cache = this.app.metadataCache.getFileCache(file);
-		return (cache?.frontmatter ?? {}) as Record<string, unknown>;
+		return frontmatterOf(this.app.metadataCache.getFileCache(file));
 	}
 
 	// ------------------------------------------------------------------- commands
@@ -451,7 +450,7 @@ export default class PrmPlugin extends Plugin {
 		try {
 			const entry = await this.tracked(file, label, async () => {
 				if (this.settings.logToBody) await this.appendBodyLog(file, date, note);
-				await this.app.fileManager.processFrontMatter(file, (fm) => {
+				await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
 					fm[FRONTMATTER_KEYS.lastContacted] = date;
 					// An explicit "I've handled this" makes any snooze meaningless.
 					delete fm[FRONTMATTER_KEYS.snoozeUntil];
@@ -471,7 +470,7 @@ export default class PrmPlugin extends Plugin {
 
 		try {
 			const entry = await this.tracked(file, label, async () => {
-				await this.app.fileManager.processFrontMatter(file, (fm) => {
+				await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
 					if (tierId === null) delete fm[FRONTMATTER_KEYS.tier];
 					else fm[FRONTMATTER_KEYS.tier] = tierId;
 					if (tierId !== null) delete fm[FRONTMATTER_KEYS.paused];
@@ -497,7 +496,7 @@ export default class PrmPlugin extends Plugin {
 
 		try {
 			const entry = await this.tracked(file, label, async () => {
-				await this.app.fileManager.processFrontMatter(file, (fm) => {
+				await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
 					if (days === null) delete fm[FRONTMATTER_KEYS.cadence];
 					else fm[FRONTMATTER_KEYS.cadence] = days;
 				});
@@ -517,7 +516,7 @@ export default class PrmPlugin extends Plugin {
 		const label = paused ? `Stop tracking ${file.basename}` : `Resume ${file.basename}`;
 		try {
 			const entry = await this.tracked(file, label, async () => {
-				await this.app.fileManager.processFrontMatter(file, (fm) => {
+				await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
 					if (paused) fm[FRONTMATTER_KEYS.paused] = true;
 					else delete fm[FRONTMATTER_KEYS.paused];
 				});
@@ -539,7 +538,7 @@ export default class PrmPlugin extends Plugin {
 		}
 		try {
 			const entry = await this.tracked(file, `Snooze ${file.basename}`, async () => {
-				await this.app.fileManager.processFrontMatter(file, (fm) => {
+				await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
 					fm[FRONTMATTER_KEYS.snoozeUntil] = until;
 				});
 			});
@@ -576,7 +575,7 @@ export default class PrmPlugin extends Plugin {
 			try {
 				await this.writes.run(file.path, async () => {
 					const before = await this.app.vault.read(file);
-					await this.app.fileManager.processFrontMatter(file, (fm) => {
+					await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
 						for (const change of plan.changes) {
 							const current = asDisplay(fm[change.key]);
 							// Someone edited it since the preview — leave theirs alone.

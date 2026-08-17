@@ -23,6 +23,7 @@ import {
 	todayISO,
 } from "./dates";
 import { isInFolder, parseJournalDate } from "./journal";
+import { asText, frontmatterOf } from "./frontmatter";
 
 interface Range {
 	start: number;
@@ -269,8 +270,8 @@ export class PrmEngine {
 
 	private hasPersonType(cache: CachedMetadata | null): boolean {
 		const key = this.settings.personTypeKey;
-		if (key.length === 0 || !cache?.frontmatter) return false;
-		const raw = (cache.frontmatter as Record<string, unknown>)[key];
+		if (key.length === 0) return false;
+		const raw = frontmatterOf(cache)[key];
 		if (raw == null) return false;
 		const want = this.settings.personTypeValue.toLowerCase();
 		if (want.length === 0) return true;
@@ -285,8 +286,8 @@ export class PrmEngine {
 	private isNotAPerson(file: TFile, cache: CachedMetadata | null): boolean {
 		if (/\.excalidraw$/i.test(file.basename)) return true;
 
-		const fm = cache?.frontmatter as Record<string, unknown> | undefined;
-		if (fm && fm["excalidraw-plugin"] !== undefined) return true;
+		const fm = frontmatterOf(cache);
+		if (fm["excalidraw-plugin"] !== undefined) return true;
 
 		const tags = cache ? (getAllTags(cache) ?? []) : [];
 		if (tags.some((t) => t.toLowerCase() === "#excalidraw")) return true;
@@ -298,10 +299,8 @@ export class PrmEngine {
 		}
 
 		// An unrendered template placeholder means this is a template, not a person.
-		if (fm) {
-			for (const value of Object.values(fm)) {
-				if (typeof value === "string" && /\{\{.+\}\}/.test(value)) return true;
-			}
+		for (const value of Object.values(fm)) {
+			if (typeof value === "string" && /\{\{.+\}\}/.test(value)) return true;
 		}
 		return false;
 	}
@@ -319,8 +318,8 @@ export class PrmEngine {
 
 		// Note-per-meeting workflows date the note in frontmatter instead.
 		const key = this.settings.journalDateKey;
-		if (key.length > 0 && cache?.frontmatter) {
-			return coerceISODate((cache.frontmatter as Record<string, unknown>)[key]);
+		if (key.length > 0) {
+			return coerceISODate(frontmatterOf(cache)[key]);
 		}
 		return null;
 	}
@@ -377,18 +376,15 @@ export class PrmEngine {
 	}
 
 	private baseRecord(file: TFile, cache: CachedMetadata | null): PersonRecord {
-		const fm = (cache?.frontmatter ?? {}) as Record<string, unknown>;
+		const fm = frontmatterOf(cache);
 		const K = FRONTMATTER_KEYS;
 
 		const rawCadence = Number(fm[K.cadence]);
 		const cadenceOverride =
 			Number.isFinite(rawCadence) && rawCadence >= 1 ? Math.round(rawCadence) : null;
 
-		const birthdayRaw = fm[K.birthday];
-		const birthday =
-			birthdayRaw == null || String(birthdayRaw).trim() === ""
-				? null
-				: String(birthdayRaw).trim();
+		const birthdayText = asText(fm[K.birthday])?.trim();
+		const birthday = birthdayText && birthdayText.length > 0 ? birthdayText : null;
 
 		let createdDate: string | null = null;
 		let baselineSource: BaselineSource = "none";
@@ -581,9 +577,13 @@ function deriveStatus(
 
 function normalizeAliases(value: unknown): string[] {
 	if (value == null) return [];
-	if (Array.isArray(value)) return value.map((v) => String(v)).filter((v) => v.length > 0);
-	const s = String(value).trim();
-	return s.length > 0 ? [s] : [];
+	if (Array.isArray(value)) {
+		return value
+			.map((v) => asText(v))
+			.filter((v): v is string => v !== null && v.length > 0);
+	}
+	const s = asText(value)?.trim();
+	return s !== undefined && s.length > 0 ? [s] : [];
 }
 
 function emptyDiagnostics(): PrmDiagnostics {

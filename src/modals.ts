@@ -143,7 +143,13 @@ export class TierPickerModal extends SuggestModal<TierChoice> {
 		el.createSpan({ text: this.label(choice), cls: "prm-suggestion-title" });
 	}
 
-	async onChooseSuggestion(choice: TierChoice): Promise<void> {
+	// SuggestModal declares this as returning void, so the async work is detached
+	// rather than making the override promise-returning.
+	onChooseSuggestion(choice: TierChoice): void {
+		void this.apply(choice);
+	}
+
+	private async apply(choice: TierChoice): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(this.record.path);
 		if (!(file instanceof TFile)) return;
 
@@ -222,8 +228,12 @@ export class SnoozeModal extends SuggestModal<SnoozeChoice> {
 		});
 	}
 
-	async onChooseSuggestion(choice: SnoozeChoice): Promise<void> {
+	onChooseSuggestion(choice: SnoozeChoice): void {
 		this.chose = true;
+		void this.apply(choice);
+	}
+
+	private async apply(choice: SnoozeChoice): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(this.record.path);
 		if (file instanceof TFile) {
 			await this.plugin.snooze(file, addDays(todayISO(), choice.days));
@@ -233,6 +243,47 @@ export class SnoozeModal extends SuggestModal<SnoozeChoice> {
 
 	onClose(): void {
 		if (!this.chose) this.onDone?.(false);
+	}
+}
+
+// ---------------------------------------------------------------- confirm modal
+
+/**
+ * A destructive-action confirmation. Native `window.confirm` blocks the whole
+ * app and looks nothing like Obsidian, so this replaces it.
+ */
+export class ConfirmModal extends Modal {
+	constructor(
+		app: App,
+		private title: string,
+		private body: string,
+		private confirmLabel: string,
+		private onConfirm: () => void,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(this.title);
+		this.contentEl.createEl("p", { text: this.body });
+
+		new Setting(this.contentEl)
+			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
+			.addButton((b) =>
+				b
+					.setButtonText(this.confirmLabel)
+					// setDestructive() is the modern call but needs Obsidian 1.13; this
+					// plugin supports 1.7.2, where setWarning() is what exists.
+					.setWarning()
+					.onClick(() => {
+						this.close();
+						this.onConfirm();
+					}),
+			);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
 	}
 }
 
@@ -324,7 +375,7 @@ export class LogContactModal extends Modal {
 			.setName("Note")
 			.setDesc("Optional. Gets appended to the log line.")
 			.addText((t) =>
-				t.setPlaceholder("caught up over text").onChange((v) => (this.note = v.trim())),
+				t.setPlaceholder("Caught up over text").onChange((v) => (this.note = v.trim())),
 			);
 
 		new Setting(contentEl)
@@ -508,12 +559,14 @@ export class ReachOutModal extends Modal {
 		parent: HTMLElement,
 		icon: string,
 		label: string,
-		onClick: () => void,
+		onClick: () => void | Promise<void>,
 	): void {
 		const btn = parent.createEl("button", { cls: "prm-action-btn" });
 		setIcon(btn.createSpan({ cls: "prm-action-icon" }), icon);
 		btn.createSpan({ text: label });
-		btn.onclick = onClick;
+		btn.onclick = () => {
+			void onClick();
+		};
 	}
 
 	private advanceOrClose(): void {
