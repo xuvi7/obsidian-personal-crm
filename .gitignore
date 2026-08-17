@@ -6,3 +6,6 @@ data.json
 
 # Local, machine-specific build helper
 deploy.local.sh
+
+# Release build output
+dist/

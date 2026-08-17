@@ -11,6 +11,7 @@ import type PrmPlugin from "./main";
 import type { Tier } from "./types";
 import type { JournalSource } from "./journal";
 import { formatDuration } from "./dates";
+import { ConfirmModal } from "./modals";
 
 export interface PrmSettings {
 	/** Folders whose notes are people. */
@@ -451,7 +452,6 @@ export class PrmSettingTab extends PluginSettingTab {
 				sl
 					.setLimits(0, 30, 1)
 					.setValue(s.dueSoonWindowDays)
-					.setDynamicTooltip()
 					.onChange(async (v) => {
 						s.dueSoonWindowDays = v;
 						await this.plugin.saveSettings();
@@ -537,22 +537,32 @@ export class PrmSettingTab extends PluginSettingTab {
 				b
 					.setIcon("trash-2")
 					.setTooltip(`Remove "${tier.label}"`)
-					.onClick(async () => {
+					.onClick(() => {
 						// Deleting a tier silently untracks everyone on it, so say so first.
 						const affected = this.plugin.engine
 							.all()
 							.filter((r) => r.tierId === tier.id).length;
-						if (affected > 0) {
-							const ok = window.confirm(
-								`${affected} ${affected === 1 ? "person is" : "people are"} on "${tier.label}". ` +
-									`Removing it will stop tracking them until you assign a new tier. Continue?`,
-							);
-							if (!ok) return;
+
+						const remove = () => {
+							s.tiers = s.tiers.filter((x) => x.id !== tier.id);
+							if (s.defaultTierId === tier.id) s.defaultTierId = s.tiers[0]?.id ?? "";
+							void this.plugin.saveSettings();
+							this.display();
+						};
+
+						if (affected === 0) {
+							remove();
+							return;
 						}
-						s.tiers = s.tiers.filter((x) => x.id !== tier.id);
-						if (s.defaultTierId === tier.id) s.defaultTierId = s.tiers[0]?.id ?? "";
-						await this.plugin.saveSettings();
-						this.display();
+						new ConfirmModal(
+							this.app,
+							`Remove "${tier.label}"?`,
+							`${affected} ${affected === 1 ? "person is" : "people are"} on this tier. ` +
+								"Removing it stops tracking them until you assign a new one. " +
+								"Their notes aren't changed.",
+							"Remove tier",
+							remove,
+						).open();
 					}),
 			);
 
@@ -615,7 +625,6 @@ export class PrmSettingTab extends PluginSettingTab {
 				sl
 					.setLimits(1, 20, 1)
 					.setValue(s.nextUpCount)
-					.setDynamicTooltip()
 					.onChange(async (v) => {
 						s.nextUpCount = v;
 						await this.plugin.saveSettings();

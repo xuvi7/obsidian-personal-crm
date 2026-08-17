@@ -85,6 +85,9 @@ export function coerceISODate(value: unknown): string | null {
 		return isISODate(iso) ? iso : null;
 	}
 
+	// Frontmatter can hold a mapping or list; those have no date reading, and
+	// String()-ing them would yield "[object Object]".
+	if (typeof value !== "string" && typeof value !== "number") return null;
 	let s = String(value).trim();
 	// Dataview and Templater setups often store dates as links: [[2026-08-15]].
 	s = s.replace(/^!?\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/, "$1").trim();

@@ -1,4 +1,4 @@
-import { Modal, Notice, Setting } from "obsidian";
+import { ButtonComponent, Modal, Notice, Setting } from "obsidian";
 import type PrmPlugin from "./main";
 import {
 	ExternalContact,
@@ -108,7 +108,8 @@ export class ContactImportModal extends Modal {
 				this.replan();
 				this.render();
 			} catch (err) {
-				new Notice(`Could not read that file: ${err instanceof Error ? err.message : err}`);
+				const message = err instanceof Error ? err.message : "unrecognised format";
+				new Notice(`Could not read that file: ${message}`);
 			}
 		};
 
@@ -238,7 +239,7 @@ export class ContactImportModal extends Modal {
 				text: `${report.ambiguous.length} skipped as ambiguous`,
 			});
 			for (const item of report.ambiguous.slice(0, 50)) {
-				details.createEl("div", {
+				details.createDiv({
 					cls: "prm-muted",
 					text: `${item.contact.displayName} → ${item.candidates.join(" / ")}`,
 				});
@@ -251,10 +252,10 @@ export class ContactImportModal extends Modal {
 				text: `${report.unmatched.length} contacts with no person note`,
 			});
 			for (const contact of report.unmatched.slice(0, 100)) {
-				details.createEl("div", { cls: "prm-muted", text: contact.displayName });
+				details.createDiv({ cls: "prm-muted", text: contact.displayName });
 			}
 			if (report.unmatched.length > 100) {
-				details.createEl("div", {
+				details.createDiv({
 					cls: "prm-muted",
 					text: `…and ${report.unmatched.length - 100} more.`,
 				});
@@ -263,8 +264,7 @@ export class ContactImportModal extends Modal {
 	}
 
 	private renderFooter(parent: HTMLElement): void {
-		const report = this.report;
-		const count = report?.plans.length ?? 0;
+		const count = this.report?.plans.length ?? 0;
 
 		new Setting(parent)
 			.setClass("prm-import-footer")
@@ -275,37 +275,46 @@ export class ContactImportModal extends Modal {
 				);
 				if (count > 0) b.setCta();
 				b.setDisabled(count === 0 || this.applying);
-				b.onClick(async () => {
-					if (!report || count === 0 || this.applying) return;
-					this.applying = true;
-					b.setDisabled(true);
-					await this.plugin.saveImportOptions(this.options);
-
-					const result = await this.plugin.applyContactImport(
-						report.plans,
-						this.options.overwriteExisting,
-						(done, total) => b.setButtonText(`Updating ${done}/${total}…`),
-					);
-					this.close();
-
-					const parts: string[] = [];
-					parts.push(
-						result.written === 0
-							? "No notes needed changing"
-							: `Updated ${result.written} ${result.written === 1 ? "note" : "notes"}`,
-					);
-					// Values that changed after the preview are left alone, so say so
-					// rather than quietly doing less than the preview promised.
-					if (result.skipped > 0) {
-						parts.push(`${result.skipped} skipped (changed since the preview)`);
-					}
-					if (result.failed.length > 0) {
-						parts.push(`${result.failed.length} failed: ${result.failed.slice(0, 3).join(", ")}`);
-					}
-					if (result.written > 0) parts.push("undo is available");
-					new Notice(`${parts.join(" · ")}.`, result.failed.length > 0 ? 12000 : 7000);
+				// The click handler stays void-returning; the work is detached.
+				b.onClick(() => {
+					void this.applyPlan(b);
 				});
 				return b;
 			});
+	}
+
+	private async applyPlan(button: ButtonComponent): Promise<void> {
+		const report = this.report;
+		if (!report || report.plans.length === 0 || this.applying) return;
+
+		this.applying = true;
+		button.setDisabled(true);
+		await this.plugin.saveImportOptions(this.options);
+
+		const result = await this.plugin.applyContactImport(
+			report.plans,
+			this.options.overwriteExisting,
+			(done, total) => {
+				button.setButtonText(`Updating ${done}/${total}…`);
+			},
+		);
+		this.close();
+
+		const parts: string[] = [
+			result.written === 0
+				? "No notes needed changing"
+				: `Updated ${result.written} ${result.written === 1 ? "note" : "notes"}`,
+		];
+		// Values that changed after the preview are left alone, so say so rather
+		// than quietly doing less than the preview promised.
+		if (result.skipped > 0) {
+			parts.push(`${result.skipped} skipped (changed since the preview)`);
+		}
+		if (result.failed.length > 0) {
+			parts.push(`${result.failed.length} failed: ${result.failed.slice(0, 3).join(", ")}`);
+		}
+		if (result.written > 0) parts.push("undo is available");
+
+		new Notice(`${parts.join(" · ")}.`, result.failed.length > 0 ? 12000 : 7000);
 	}
 }
