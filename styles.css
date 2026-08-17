@@ -360,13 +360,25 @@
 	font-weight: 600;
 }
 
+/* A bounded scroll region. The height cap has to live on this element and not on
+   the one carrying `markdown-rendered`, or Obsidian's markdown styles win and the
+   box grows to the full height of the note. */
 .prm-preview {
-	max-height: 28vh;
+	height: 30vh;
+	min-height: 6rem;
+	max-height: 30vh;
 	overflow-y: auto;
+	overscroll-behavior: contain;
 	padding: 0.4rem 0.75rem;
 	background: var(--background-secondary);
 	border-radius: var(--radius-m);
 	font-size: var(--font-ui-small);
+}
+
+.prm-preview-body {
+	/* Content sizes itself; the parent does the clipping. */
+	max-height: none;
+	overflow: visible;
 }
 
 .prm-preview h1,
@@ -809,5 +821,10 @@
 @media (max-width: 700px) {
 	.prm-note-input {
 		min-height: 5rem;
+	}
+
+	.prm-preview {
+		height: 24vh;
+		max-height: 24vh;
 	}
 }

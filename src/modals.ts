@@ -17,30 +17,81 @@ import type { PersonRecord, Tier } from "./types";
 import { addDays, formatDuration, isISODate, relativeToToday, todayISO } from "./dates";
 
 /**
- * Frontmatter and leading inline fields (`up::`, `parent::`, Breadcrumbs, …) are
- * navigation chrome, not content, so they're stripped from previews.
+ * Reduce a person note to the part worth reading in a preview.
+ *
+ * Strips frontmatter, leading inline fields (`up::`, `parent::`, Breadcrumbs),
+ * unrendered template syntax, and sections that turn out to be empty once those
+ * are gone. A note straight from a template is mostly placeholder — showing it
+ * verbatim fills the preview with nothing.
  */
-function stripChrome(markdown: string): string {
+export function previewBody(markdown: string): string {
 	let body = markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
 	// Only leading field lines: a `::` deeper in the note is probably real prose.
 	body = body.replace(/^(?:\s*[A-Za-z][\w -]*::.*(?:\r?\n|$))+/, "");
-	return body.trim();
+	// Templater / placeholder syntax that was never filled in.
+	body = body.replace(/<%[\s\S]*?%>/g, "").replace(/\{\{[^{}]*\}\}/g, "");
+	// A bullet that is only a label with no value, e.g. "- First met:".
+	body = body.replace(/^[ \t]*[-*+]\s*[^:\n]{1,40}:[ \t]*$/gm, "");
+	return dropEmptySections(body).trim();
 }
 
+/** Remove headings with nothing under them, so they don't fill the preview. */
+function dropEmptySections(markdown: string): string {
+	const lines = markdown.split(/\r?\n/);
+	const keep: string[] = [];
+
+	for (let i = 0; i < lines.length; i++) {
+		const heading = /^(#{1,6})\s+/.exec(lines[i]);
+		if (!heading) {
+			keep.push(lines[i]);
+			continue;
+		}
+
+		let hasContent = false;
+		for (let j = i + 1; j < lines.length; j++) {
+			const next = /^(#{1,6})\s+/.exec(lines[j]);
+			// Stop at the next heading of the same or higher level.
+			if (next && next[1].length <= heading[1].length) break;
+			if (lines[j].replace(/^[ \t]*[-*+]\s*/, "").trim().length > 0) {
+				hasContent = true;
+				break;
+			}
+		}
+		if (hasContent) keep.push(lines[i]);
+	}
+
+	return keep.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
+/**
+ * Render a note into a bounded, scrollable box.
+ *
+ * The rendered markdown goes in a child rather than the scroll container itself:
+ * Obsidian's own `markdown-rendered` styles apply to that child, so they can't
+ * interfere with the container's height cap. Previously the container carried both
+ * roles and grew to the full height of the file, pushing the modal's buttons out
+ * of reach and making only the top of the note visible.
+ */
 async function renderNotePreview(
 	app: App,
+	scroller: HTMLElement,
 	file: TFile,
-	el: HTMLElement,
 	component: Component,
 ): Promise<void> {
-	el.empty();
+	scroller.empty();
 	const raw = await app.vault.cachedRead(file);
-	const body = stripChrome(raw);
+	const body = previewBody(raw);
+
 	if (body.length === 0) {
-		el.createEl("p", { cls: "prm-preview-empty", text: "This note is empty." });
+		scroller.createEl("p", {
+			cls: "prm-preview-empty",
+			text: "Nothing written about them yet.",
+		});
 		return;
 	}
-	await MarkdownRenderer.render(app, body, el, file.path, component);
+
+	const rendered = scroller.createDiv({ cls: "prm-preview-body markdown-rendered" });
+	await MarkdownRenderer.render(app, body, rendered, file.path, component);
 }
 
 function lastContactLabel(record: PersonRecord): string {
@@ -558,10 +609,10 @@ export class ReachOutModal extends Modal {
 		}
 		if (record.relationship) meta.createSpan({ text: record.relationship });
 
-		const previewEl = contentEl.createDiv({ cls: "prm-preview markdown-rendered" });
+		const previewEl = contentEl.createDiv({ cls: "prm-preview" });
 		const file = this.app.vault.getAbstractFileByPath(record.path);
 		if (file instanceof TFile && this.preview) {
-			void renderNotePreview(this.app, file, previewEl, this.preview);
+			void renderNotePreview(this.app, previewEl, file, this.preview);
 		}
 
 		const logIt = async () => {
@@ -787,10 +838,10 @@ export class TriageModal extends Modal {
 			meta.createSpan({ text: `note created ${relativeToToday(record.createdDate)}` });
 		}
 
-		const previewEl = contentEl.createDiv({ cls: "prm-preview markdown-rendered" });
+		const previewEl = contentEl.createDiv({ cls: "prm-preview" });
 		const file = this.app.vault.getAbstractFileByPath(record.path);
 		if (file instanceof TFile && this.preview) {
-			void renderNotePreview(this.app, file, previewEl, this.preview);
+			void renderNotePreview(this.app, previewEl, file, this.preview);
 		}
 
 		const actions = contentEl.createDiv({ cls: "prm-triage-actions" });
