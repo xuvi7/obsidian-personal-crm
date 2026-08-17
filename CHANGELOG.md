@@ -5,6 +5,23 @@ All notable changes to Personal CRM. Versions follow
 
 ## Unreleased
 
+### Added
+
+- **Create a person note** from the command palette, with three new settings —
+  the folder to create in, a template to copy, and a tier to assign — so a new
+  person is tracked from the moment they exist. An existing note is never
+  overwritten; creating someone who already exists opens them instead.
+- Templates support `{{title}}`, `{{date}}`, `{{time}}` and any imported field as
+  `{{email}}`, `{{phone}}` and so on. Templater's `tp.date.now`, `tp.file.title`
+  and `tp.file.cursor` are translated to their result; other Templater expressions
+  are removed rather than left sitting in the note unevaluated.
+- **Contacts with no matching note are now actionable in the import.** Each one
+  offers *Create note* — using the same folder, template and tier — or *Link to…*,
+  which attaches the details to an existing person filed under a different name.
+  Both feed the same review list, and creations are covered by the same single undo.
+- Undo now covers created notes. Undoing a creation trashes the note, unless it has
+  been edited since, in which case it's left alone as the user's work.
+
 ### Fixed
 
 - **Rebuild index now reports what it found** — "239 people · 1897/1897 dated

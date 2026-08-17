@@ -77,6 +77,27 @@ organised by area rather than by type works fine. Templates, MOCs and index note
 are excluded by title fragment, and notes with unrendered `{{placeholders}}` are
 skipped.
 
+## Adding people
+
+**Create a person note…** makes a note in the folder you nominate, optionally from
+a template, and can assign a tier so the person is tracked straight away. Three
+settings under *Creating new people* control it:
+
+| Setting | Meaning |
+| --- | --- |
+| New person folder | Where new notes go. Defaults to your first people folder. |
+| Template for new people | A note to copy. Leave empty for a plain note. |
+| Tier for new people | Assign a cadence immediately, or leave unclassified. |
+
+Templates support `{{title}}`, `{{date}}`, `{{time}}` (and `{{date:FORMAT}}`), plus
+any imported field as `{{email}}`, `{{phone}}`, `{{company}}` and so on. Templater's
+`tp.date.now`, `tp.file.title` and `tp.file.cursor` are translated to their result;
+other Templater expressions are removed rather than left in the note, since the
+plugin can't evaluate them.
+
+An existing note is never overwritten — creating someone who already exists just
+opens them.
+
 ## Tiers
 
 A tier is just a cadence. Defaults, all editable:
@@ -134,8 +155,11 @@ or **vCard**; both current and older column layouts are handled. Then:
   at the moment of writing, so a value you edited after the preview is never
   clobbered.
 - Notes titled with just a first name only match if you opt in.
+- A contact with no matching note can be resolved in place: **Create note** makes
+  one using the settings above, or **Link to…** attaches the details to an existing
+  person whose note is named differently. Both join the same review list.
 - Nothing is written until you've reviewed the full list of changes, and the whole
-  import is one undo away.
+  import — creations included — is one undo away.
 
 This is a file import, not a live connection — re-export to refresh. A live sync
 would need a Google Cloud OAuth client of your own, which a distributed plugin

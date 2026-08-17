@@ -33,6 +33,31 @@ export interface PersonPlan {
 	changes: PlannedChange[];
 }
 
+/** A contact the user chose to create a note for. */
+export interface PersonCreation {
+	contact: ExternalContact;
+	/** The note title to use — the contact's display name unless edited. */
+	name: string;
+}
+
+/** The fields an import writes, as plain values for a new note's frontmatter. */
+export function contactFields(contact: ExternalContact): Record<string, string> {
+	const out: Record<string, string> = {};
+	if (contact.emails.length > 0) out["email"] = contact.emails.join(", ");
+	if (contact.phones.length > 0) out["phone"] = contact.phones.join(", ");
+	if (contact.company) out["company"] = contact.company;
+	if (contact.title) out["title"] = contact.title;
+	if (contact.location) out["location"] = contact.location;
+	if (contact.birthday) out["prm-birthday"] = contact.birthday;
+	if (contact.labels.length > 0) out["prm-relationship"] = contact.labels.join(", ");
+	return out;
+}
+
+/** Stable identity for a contact across re-plans, so decisions survive a toggle. */
+export function contactKey(contact: ExternalContact): string {
+	return `${normalizeName(contact.displayName)}|${contact.emails[0] ?? ""}|${contact.phones[0] ?? ""}`;
+}
+
 export interface MatchReport {
 	plans: PersonPlan[];
 	/** Contacts that matched more than one person; never applied automatically. */

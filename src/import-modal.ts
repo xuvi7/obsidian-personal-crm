@@ -1,12 +1,21 @@
 import { ButtonComponent, Modal, Notice, Setting } from "obsidian";
 import type PrmPlugin from "./main";
 import {
+	contactKey,
 	ExternalContact,
 	ImportOptions,
 	MatchReport,
 	matchContacts,
 	parseContactsFile,
+	PersonCreation,
+	planChanges,
 } from "./contacts";
+import { PersonPickerModal } from "./modals";
+
+/** What the user chose to do with a contact that matched nothing. */
+type Decision =
+	| { kind: "create"; name: string }
+	| { kind: "link"; path: string; name: string };
 
 const MAX_ROWS = 200;
 
@@ -19,10 +28,13 @@ const MAX_ROWS = 200;
  */
 export class ContactImportModal extends Modal {
 	private contacts: ExternalContact[] = [];
+	private creations: PersonCreation[] = [];
 	private sourceName = "";
 	private report: MatchReport | null = null;
 	private options: ImportOptions;
 	private applying = false;
+	/** Create/link choices for unmatched contacts, keyed so they survive a replan. */
+	private decisions = new Map<string, Decision>();
 
 	constructor(private plugin: PrmPlugin) {
 		super(plugin.app);
@@ -50,12 +62,57 @@ export class ContactImportModal extends Modal {
 			this.report = null;
 			return;
 		}
-		this.report = matchContacts(
+		const report = matchContacts(
 			this.contacts,
 			this.plugin.engine.all(),
 			(path) => this.plugin.frontmatterFor(path),
 			this.options,
 		);
+
+		// Apply the user's decisions: a linked contact becomes an ordinary update
+		// against the note they picked; a created one moves to the creations list.
+		const stillUnmatched: ExternalContact[] = [];
+		const byPath = new Map(this.plugin.engine.all().map((r) => [r.path, r]));
+		this.creations = [];
+
+		for (const contact of report.unmatched) {
+			const decision = this.decisions.get(contactKey(contact));
+			if (!decision) {
+				stillUnmatched.push(contact);
+				continue;
+			}
+			if (decision.kind === "create") {
+				this.creations.push({ contact, name: decision.name });
+				continue;
+			}
+			const record = byPath.get(decision.path);
+			if (!record) {
+				// The note went away; drop the stale decision rather than guessing.
+				this.decisions.delete(contactKey(contact));
+				stillUnmatched.push(contact);
+				continue;
+			}
+			const changes = planChanges(
+				contact,
+				this.plugin.frontmatterFor(decision.path),
+				this.options,
+			);
+			if (changes.length === 0) {
+				report.unchanged++;
+			} else {
+				report.plans.push({
+					personPath: decision.path,
+					personName: record.name,
+					contact,
+					confidence: "alias",
+					changes,
+				});
+			}
+		}
+
+		report.unmatched = stillUnmatched;
+		report.plans.sort((a, b) => a.personName.localeCompare(b.personName));
+		this.report = report;
 	}
 
 	// ----------------------------------------------------------------- rendering
@@ -181,6 +238,7 @@ export class ContactImportModal extends Modal {
 		};
 
 		stat(report.plans.length, "to update", "prm-stat-soon");
+		if (this.creations.length > 0) stat(this.creations.length, "to create", "prm-stat-soon");
 		stat(report.unchanged, "already current");
 		stat(report.unmatched.length, "no matching note");
 		if (report.ambiguous.length > 0) stat(report.ambiguous.length, "ambiguous");
@@ -246,33 +304,101 @@ export class ContactImportModal extends Modal {
 			}
 		}
 
+		if (this.creations.length > 0) {
+			const details = list.createEl("details", { cls: "prm-import-details" });
+			details.setAttribute("open", "");
+			details.createEl("summary", {
+				text: `${this.creations.length} new ${this.creations.length === 1 ? "note" : "notes"} to create in ${this.plugin.newPersonFolder()}`,
+			});
+			for (const creation of this.creations) {
+				const row = details.createDiv({ cls: "prm-import-row" });
+				const head = row.createDiv({ cls: "prm-name-row" });
+				head.createSpan({ cls: "prm-name", text: creation.name });
+				head.createSpan({ cls: "prm-chip prm-chip-soon", text: "new" });
+				const undo = head.createEl("button", { cls: "prm-chip prm-chip-button", text: "Don't" });
+				undo.onclick = () => {
+					this.decisions.delete(contactKey(creation.contact));
+					this.replan();
+					this.render();
+				};
+			}
+		}
+
 		if (report.unmatched.length > 0) {
 			const details = list.createEl("details", { cls: "prm-import-details" });
 			details.createEl("summary", {
 				text: `${report.unmatched.length} contacts with no person note`,
 			});
-			for (const contact of report.unmatched.slice(0, 100)) {
-				details.createDiv({ cls: "prm-muted", text: contact.displayName });
+			details.createDiv({
+				cls: "prm-muted",
+				text: "Create a note for them, or attach the details to someone you already have under a different name.",
+			});
+			for (const contact of report.unmatched.slice(0, MAX_ROWS)) {
+				this.renderUnmatched(details, contact);
 			}
-			if (report.unmatched.length > 100) {
+			if (report.unmatched.length > MAX_ROWS) {
 				details.createDiv({
 					cls: "prm-muted",
-					text: `…and ${report.unmatched.length - 100} more.`,
+					text: `…and ${report.unmatched.length - MAX_ROWS} more. Narrow the export if you need to reach them.`,
 				});
 			}
 		}
 	}
 
+	/** One unmatched contact, with the two ways to resolve it. */
+	private renderUnmatched(parent: HTMLElement, contact: ExternalContact): void {
+		const row = parent.createDiv({ cls: "prm-import-row prm-unmatched-row" });
+
+		const head = row.createDiv({ cls: "prm-name-row" });
+		head.createSpan({ cls: "prm-name", text: contact.displayName });
+		const detail = [contact.emails[0], contact.phones[0], contact.company]
+			.filter((v): v is string => !!v && v.length > 0)
+			.join(" · ");
+		if (detail.length > 0) head.createSpan({ cls: "prm-muted", text: detail });
+
+		const actions = row.createDiv({ cls: "prm-unmatched-actions" });
+
+		const create = actions.createEl("button", { text: "Create note" });
+		create.onclick = () => {
+			this.decisions.set(contactKey(contact), {
+				kind: "create",
+				name: contact.displayName,
+			});
+			this.replan();
+			this.render();
+		};
+
+		const link = actions.createEl("button", { text: "Link to…" });
+		link.onclick = () => {
+			new PersonPickerModal(
+				this.plugin,
+				this.plugin.engine.all(),
+				(record) => {
+					this.decisions.set(contactKey(contact), {
+						kind: "link",
+						path: record.path,
+						name: record.name,
+					});
+					this.replan();
+					this.render();
+				},
+				`Attach ${contact.displayName} to which note?`,
+			).open();
+		};
+	}
+
 	private renderFooter(parent: HTMLElement): void {
-		const count = this.report?.plans.length ?? 0;
+		const updates = this.report?.plans.length ?? 0;
+		const count = updates + this.creations.length;
 
 		new Setting(parent)
 			.setClass("prm-import-footer")
 			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
 			.addButton((b) => {
-				b.setButtonText(
-					count === 0 ? "Nothing to update" : `Update ${count} ${count === 1 ? "note" : "notes"}`,
-				);
+				const parts: string[] = [];
+				if (this.creations.length > 0) parts.push(`create ${this.creations.length}`);
+				if (updates > 0) parts.push(`update ${updates}`);
+				b.setButtonText(count === 0 ? "Nothing to apply" : `Apply — ${parts.join(", ")}`);
 				if (count > 0) b.setCta();
 				b.setDisabled(count === 0 || this.applying);
 				// The click handler stays void-returning; the work is detached.
@@ -285,7 +411,8 @@ export class ContactImportModal extends Modal {
 
 	private async applyPlan(button: ButtonComponent): Promise<void> {
 		const report = this.report;
-		if (!report || report.plans.length === 0 || this.applying) return;
+		if (!report || (report.plans.length === 0 && this.creations.length === 0)) return;
+		if (this.applying) return;
 
 		this.applying = true;
 		button.setDisabled(true);
@@ -295,16 +422,21 @@ export class ContactImportModal extends Modal {
 			report.plans,
 			this.options.overwriteExisting,
 			(done, total) => {
-				button.setButtonText(`Updating ${done}/${total}…`);
+				button.setButtonText(`Applying ${done}/${total}…`);
 			},
+			this.creations,
 		);
 		this.close();
 
-		const parts: string[] = [
+		const parts: string[] = [];
+		if (result.created > 0) {
+			parts.push(`Created ${result.created} ${result.created === 1 ? "note" : "notes"}`);
+		}
+		parts.push(
 			result.written === 0
-				? "No notes needed changing"
-				: `Updated ${result.written} ${result.written === 1 ? "note" : "notes"}`,
-		];
+				? "no notes needed changing"
+				: `updated ${result.written} ${result.written === 1 ? "note" : "notes"}`,
+		);
 		// Values that changed after the preview are left alone, so say so rather
 		// than quietly doing less than the preview promised.
 		if (result.skipped > 0) {

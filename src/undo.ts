@@ -9,9 +9,17 @@ export interface FileSnapshot {
 	after: string;
 }
 
+/** A note this action brought into existence. Undo removes it again. */
+export interface CreatedFile {
+	path: string;
+	content: string;
+}
+
 export interface UndoEntry {
 	label: string;
 	files: FileSnapshot[];
+	/** Notes created by this action, deleted on undo and remade on redo. */
+	created: CreatedFile[];
 	timestamp: number;
 	bytes: number;
 }
@@ -81,14 +89,21 @@ export class UndoManager {
 	}
 
 	/** Record a completed change. Any pending redo history is invalidated. */
-	record(label: string, files: FileSnapshot[]): UndoEntry | null {
+	record(label: string, files: FileSnapshot[], created: CreatedFile[] = []): UndoEntry | null {
 		const changed = files.filter((f) => f.before !== f.after);
-		if (changed.length === 0) return null;
+		if (changed.length === 0 && created.length === 0) return null;
 
 		let bytes = 0;
 		for (const f of changed) bytes += f.before.length + f.after.length;
+		for (const c of created) bytes += c.content.length;
 
-		const entry: UndoEntry = { label, files: changed, timestamp: Date.now(), bytes };
+		const entry: UndoEntry = {
+			label,
+			files: changed,
+			created,
+			timestamp: Date.now(),
+			bytes,
+		};
 		this.undoStack.push(entry);
 		this.redoStack = [];
 		this.trim();
@@ -181,6 +196,35 @@ export class UndoManager {
 	}
 
 	/**
+	 * Remove a note this action created — but only if it still holds exactly what
+	 * was written. Once it has been edited it is the user's work, not ours to
+	 * discard, so it is left in place.
+	 *
+	 * Trashed rather than deleted outright, so it is recoverable either way.
+	 */
+	private async removeCreated(created: CreatedFile): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(created.path);
+		if (!(file instanceof TFile)) return;
+		const current = await this.app.vault.read(file);
+		if (current !== created.content) return;
+		await this.app.fileManager.trashFile(file);
+	}
+
+	/** Put a created note back, for redo. */
+	private async restoreCreated(created: CreatedFile): Promise<void> {
+		const existing = this.app.vault.getAbstractFileByPath(created.path);
+		if (existing instanceof TFile) {
+			await this.queue.run(created.path, async () => {
+				await this.app.vault.process(existing, () => created.content);
+			});
+			return;
+		}
+		await this.queue.run(created.path, async () => {
+			await this.app.vault.create(created.path, created.content);
+		});
+	}
+
+	/**
 	 * Restore every file in the entry to `target`.
 	 *
 	 * Validates all files before writing any, then rolls back what it wrote if a
@@ -222,6 +266,11 @@ export class UndoManager {
 					await this.app.vault.process(file, () => content);
 				});
 				written.push({ file, rollback });
+			}
+			// Undo removes what the action created; redo puts it back.
+			for (const c of entry.created) {
+				if (target === "before") await this.removeCreated(c);
+				else await this.restoreCreated(c);
 			}
 		} catch (err) {
 			for (const { file, rollback } of written.reverse()) {

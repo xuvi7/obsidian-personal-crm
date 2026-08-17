@@ -11,6 +11,7 @@ import { PRM_VIEW_TYPE, PrmDashboardView } from "./view";
 import {
 	LogContactModal,
 	PersonPickerModal,
+	PromptModal,
 	ReachOutModal,
 	SnoozeModal,
 	TierPickerModal,
@@ -22,8 +23,15 @@ import { WriteQueue } from "./writes";
 import { detectJournalSources, detectPeopleFolder } from "./detect";
 import { formatDuration, isISODate, todayISO } from "./dates";
 import type { PersonRecord } from "./types";
-import { asDisplay, ImportOptions, PersonPlan } from "./contacts";
+import {
+	asDisplay,
+	contactFields,
+	ImportOptions,
+	PersonCreation,
+	PersonPlan,
+} from "./contacts";
 import { frontmatterOf, MutableFrontmatter } from "./frontmatter";
+import { defaultPersonNote, renderTemplate, sanitizeNoteName } from "./templates";
 
 interface WriteOptions {
 	silent?: boolean;
@@ -305,6 +313,22 @@ export default class PrmPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "create-person",
+			name: "Create a person note…",
+			callback: () => {
+				new PromptModal(
+					this.app,
+					"Who is it?",
+					"",
+					async (name) => {
+						if (name.trim().length === 0) return;
+						await this.createPerson(name.trim(), { open: true });
+					},
+				).open();
+			},
+		});
+
+		this.addCommand({
 			id: "import-contacts",
 			name: "Import contact details from a Google Contacts export…",
 			callback: () => this.openContactImport(),
@@ -390,6 +414,113 @@ export default class PrmPlugin extends Plugin {
 
 	openContactImport(): void {
 		new ContactImportModal(this).open();
+	}
+
+	// -------------------------------------------------------- creating people
+
+	/** Where new person notes go: the dedicated setting, else the first people folder. */
+	newPersonFolder(): string {
+		const configured = cleanFolderPath(this.settings.newPersonFolder);
+		if (configured.length > 0) return configured;
+		return this.settings.personFolders[0] ?? "People";
+	}
+
+	/** Build the text of a new person note, from the configured template if any. */
+	async personNoteContent(name: string, fields: Record<string, string>): Promise<string> {
+		const templatePath = this.settings.newPersonTemplate.trim();
+		if (templatePath.length > 0) {
+			const file = this.app.vault.getAbstractFileByPath(templatePath);
+			if (file instanceof TFile) {
+				const raw = await this.app.vault.cachedRead(file);
+				return renderTemplate(raw, { title: name, fields });
+			}
+			// Say so rather than silently falling back to a different shape.
+			new Notice(`Template "${templatePath}" not found — using a plain note.`);
+		}
+		return defaultPersonNote({ title: name, fields });
+	}
+
+	/**
+	 * Create one person note.
+	 *
+	 * Returns the existing note untouched if one already has that name — creating a
+	 * person is not a reason to overwrite what's already written about them.
+	 */
+	async createPerson(
+		rawName: string,
+		opts: { fields?: Record<string, string>; tierId?: string | null; open?: boolean } = {},
+	): Promise<{ file: TFile; created: boolean } | null> {
+		const name = sanitizeNoteName(rawName);
+		if (name.length === 0) {
+			new Notice("That name can't be used as a note title.");
+			return null;
+		}
+
+		const folder = this.newPersonFolder();
+		const path = folder.length > 0 ? `${folder}/${name}.md` : `${name}.md`;
+
+		const existing = this.app.vault.getAbstractFileByPath(path);
+		if (existing instanceof TFile) {
+			new Notice(`${name} already exists.`);
+			if (opts.open) await this.app.workspace.getLeaf(false).openFile(existing);
+			return { file: existing, created: false };
+		}
+
+		try {
+			await this.ensureFolder(folder);
+			const content = await this.personNoteContent(name, opts.fields ?? {});
+			const file = await this.app.vault.create(path, content);
+
+			const tierId = opts.tierId ?? this.settings.newPersonTier;
+			await this.applyPersonFields(file, opts.fields ?? {}, tierId);
+
+			const finalContent = await this.app.vault.read(file);
+			this.undo.record(`Create ${name}`, [], [{ path: file.path, content: finalContent }]);
+
+			this.engine.rebuild();
+			this.refreshStatusBar();
+			if (opts.open) await this.app.workspace.getLeaf(false).openFile(file);
+			return { file, created: true };
+		} catch (err) {
+			const detail = err instanceof Error ? err.message : String(err);
+			console.error(`[personal-crm] could not create ${path}`, err);
+			new Notice(`Could not create ${name}: ${detail}`);
+			return null;
+		}
+	}
+
+	/**
+	 * Write the plugin's own fields into a freshly created note.
+	 *
+	 * Done through processFrontMatter rather than by string-building, so the result
+	 * is valid YAML whatever shape the user's template is in — and so a template
+	 * that already sets one of these keeps its value.
+	 */
+	private async applyPersonFields(
+		file: TFile,
+		fields: Record<string, string>,
+		tierId: string | null,
+	): Promise<void> {
+		await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
+			if (tierId && tierId.length > 0 && fm[FRONTMATTER_KEYS.tier] === undefined) {
+				fm[FRONTMATTER_KEYS.tier] = tierId;
+			}
+			for (const [key, value] of Object.entries(fields)) {
+				if (value.trim().length === 0) continue;
+				if (fm[key] === undefined) fm[key] = value;
+			}
+		});
+	}
+
+	private async ensureFolder(folder: string): Promise<void> {
+		if (folder.length === 0) return;
+		if (this.app.vault.getAbstractFileByPath(folder)) return;
+		try {
+			await this.app.vault.createFolder(folder);
+		} catch {
+			// Another writer may have created it in between; only a genuine failure
+			// matters, and vault.create() below will report that.
+		}
 	}
 
 	async openPerson(record: PersonRecord, newTab = false): Promise<void> {
@@ -569,10 +700,43 @@ export default class PrmPlugin extends Plugin {
 		plans: PersonPlan[],
 		overwriteExisting: boolean,
 		onProgress?: (done: number, total: number) => void,
-	): Promise<{ written: number; skipped: number; failed: string[] }> {
+		creations: PersonCreation[] = [],
+	): Promise<{ written: number; created: number; skipped: number; failed: string[] }> {
 		const snapshots: FileSnapshot[] = [];
+		const created: { path: string; content: string }[] = [];
 		const failed: string[] = [];
 		let skipped = 0;
+		const total = plans.length + creations.length;
+
+		// Create the new notes first, so a failure happens before anything is edited.
+		for (let i = 0; i < creations.length; i++) {
+			const creation = creations[i];
+			const name = sanitizeNoteName(creation.name);
+			if (name.length === 0) {
+				failed.push(creation.name);
+				continue;
+			}
+			const folder = this.newPersonFolder();
+			const path = folder.length > 0 ? `${folder}/${name}.md` : `${name}.md`;
+			if (this.app.vault.getAbstractFileByPath(path)) {
+				// Someone else made it, or it was in the list twice.
+				skipped++;
+				continue;
+			}
+			try {
+				await this.ensureFolder(folder);
+				const fields = contactFields(creation.contact);
+				const content = await this.personNoteContent(name, fields);
+				const file = await this.app.vault.create(path, content);
+				await this.applyPersonFields(file, fields, this.settings.newPersonTier);
+				created.push({ path: file.path, content: await this.app.vault.read(file) });
+			} catch (err) {
+				failed.push(creation.name);
+				console.error(`[personal-crm] could not create ${path}`, err);
+			}
+			onProgress?.(i + 1, total);
+			if (i % 25 === 24) await new Promise((r) => window.setTimeout(r, 0));
+		}
 
 		for (let i = 0; i < plans.length; i++) {
 			const plan = plans[i];
@@ -606,23 +770,21 @@ export default class PrmPlugin extends Plugin {
 				console.error(`[personal-crm] import failed for ${plan.personPath}`, err);
 			}
 
-			onProgress?.(i + 1, plans.length);
+			onProgress?.(creations.length + i + 1, total);
 			// Yield so a few thousand notes don't freeze the window.
 			if (i % 25 === 24) await new Promise((r) => window.setTimeout(r, 0));
 		}
 
-		if (snapshots.length > 0) {
-			this.undo.record(
-				`Import contact details for ${snapshots.length} ${
-					snapshots.length === 1 ? "person" : "people"
-				}`,
-				snapshots,
-			);
+		if (snapshots.length > 0 || created.length > 0) {
+			const parts: string[] = [];
+			if (created.length > 0) parts.push(`create ${created.length}`);
+			if (snapshots.length > 0) parts.push(`update ${snapshots.length}`);
+			this.undo.record(`Contact import: ${parts.join(", ")}`, snapshots, created);
 		}
 
 		this.engine.rebuild();
 		this.refreshStatusBar();
-		return { written: snapshots.length, skipped, failed };
+		return { written: snapshots.length, created: created.length, skipped, failed };
 	}
 
 	/**

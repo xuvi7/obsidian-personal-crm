@@ -28,6 +28,13 @@ export interface PrmSettings {
 	/** Basename fragments that are never people (templates, MOCs, indexes). */
 	personExclusions: string[];
 
+	/** Folder new person notes are created in. Empty = the first people folder. */
+	newPersonFolder: string;
+	/** Note used as the template for new people. Empty = a plain built-in note. */
+	newPersonTemplate: string;
+	/** Tier assigned to a newly created person. Empty = leave unclassified. */
+	newPersonTier: string;
+
 	/** Folders of dated notes, each with its own moment format. */
 	journalSources: JournalSource[];
 	/** Try a set of well-known date formats when a source's format doesn't match. */
@@ -72,6 +79,10 @@ export const DEFAULT_SETTINGS: PrmSettings = {
 	personTypeValue: "",
 	requireTagOrType: false,
 	personExclusions: ["template", "MOC", "index", "dashboard", "untitled"],
+
+	newPersonFolder: "",
+	newPersonTemplate: "",
+	newPersonTier: "",
 
 	journalSources: [{ folder: "Daily Notes", format: "YYYY-MM-DD" }],
 	allowFallbackDateFormats: true,
@@ -279,6 +290,7 @@ export class PrmSettingTab extends PluginSettingTab {
 			this.statusDefinition(),
 			this.peopleGroup(),
 			this.personFoldersList(),
+			this.newPeopleGroup(),
 			this.journalGroup(),
 			this.journalSourcesList(),
 			this.contactRulesGroup(),
@@ -416,6 +428,46 @@ export class PrmSettingTab extends PluginSettingTab {
 					this.update();
 				},
 			},
+		};
+	}
+
+	private newPeopleGroup(): SettingDefinitionItem {
+		const tierOptions: Record<string, string> = { "": "Leave unclassified" };
+		for (const tier of this.plugin.settings.tiers) tierOptions[tier.id] = tier.label;
+		const fallback = this.plugin.settings.personFolders[0] ?? "People";
+
+		return {
+			type: "group",
+			heading: "Creating new people",
+			items: [
+				{
+					name: "New person folder",
+					desc: `Where "Create a person note" and the contact importer put new notes. Leave empty to use ${fallback}.`,
+					aliases: ["create", "new", "location"],
+					control: {
+						type: "folder",
+						key: "newPersonFolder",
+						placeholder: fallback,
+						includeRoot: false,
+					},
+				},
+				{
+					name: "Template for new people",
+					desc: "A note to copy. Supports {{title}}, {{date}}, {{time}} and any imported field as {{email}}, {{phone}} and so on. Templater's tp.date.now, tp.file.title and tp.file.cursor are translated; other Templater expressions are removed, since they can't be evaluated here. Leave empty for a plain note.",
+					aliases: ["template", "create", "new"],
+					control: {
+						type: "file",
+						key: "newPersonTemplate",
+						placeholder: "Templates/Person.md",
+					},
+				},
+				{
+					name: "Tier for new people",
+					desc: "Assign a cadence straight away, so a new person is tracked without a separate step.",
+					aliases: ["create", "cadence"],
+					control: { type: "dropdown", key: "newPersonTier", options: tierOptions },
+				},
+			],
 		};
 	}
 
