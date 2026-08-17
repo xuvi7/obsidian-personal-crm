@@ -12,6 +12,28 @@ So contact history needs no data entry. Write your notes as usual and the plugin
 knows when you last saw someone. The only thing you tell it is **how often you
 want to be in touch** with each person.
 
+## Installing
+
+Not in the community plugin directory yet, so either:
+
+**With [BRAT](https://github.com/TfTHacker/obsidian42-brat)** — add the beta plugin
+`xuvi7/obsidian-personal-crm`. BRAT keeps it updated.
+
+**By hand** — download `main.js`, `manifest.json` and `styles.css` from the
+[latest release](https://github.com/xuvi7/obsidian-personal-crm/releases/latest)
+into `<your vault>/.obsidian/plugins/personal-crm/`, then enable it under Community
+plugins.
+
+Requires Obsidian 1.13.0 or newer. Older versions are served the newest release they
+can run, so 1.7–1.12 will get 1.1.0.
+
+Release assets are built in CI and carry [build provenance](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations),
+so you can check they came from this source:
+
+```bash
+gh attestation verify main.js --repo xuvi7/obsidian-personal-crm
+```
+
 ## How it works
 
 ```
