@@ -189,6 +189,12 @@ Effective last contact is the **most recent** of any dated-note mention and
 No hotkeys are bound by default — notably, undo is *not* mapped to Cmd+Z, so it
 can't interfere with normal editor undo. Bind it yourself if you want one.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). Note that 1.1.0 changes how contact is
+detected — links in unchecked to-dos, quotes, code blocks and embeds no longer
+count — so some people may appear less recently contacted after upgrading.
+
 ## Development
 
 ```bash
