@@ -7,6 +7,11 @@ All notable changes to Personal CRM. Versions follow
 
 ### Fixed
 
+- **Rebuild index now reports what it found** — "239 people · 1897/1897 dated
+  notes · 2877 interactions · 50ms" — instead of appearing to do nothing. It was
+  re-deriving the index correctly, but since the index already updates itself as
+  notes change, the counts rarely moved and there was no other feedback.
+
 - Release notes contained the entire changelog rather than the section for the
   version being released. The workflow now extracts just that version's section,
   and fails before building if the version has no changelog entry at all.

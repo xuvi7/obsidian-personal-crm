@@ -711,11 +711,10 @@ export class PrmSettingTab extends PluginSettingTab {
 				},
 				{
 					name: "Rebuild index",
-					desc: "Re-scans people and dated notes.",
+					desc: "Re-scans people and dated notes, and reports what it found. The index already updates itself as notes change, so this is for checking rather than fixing.",
 					aliases: ["reindex", "refresh"],
 					action: () => {
-						this.plugin.engine.rebuild();
-						this.plugin.refreshStatusBar();
+						this.plugin.rebuildAndReport();
 						this.update();
 					},
 				},

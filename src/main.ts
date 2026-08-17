@@ -333,17 +333,27 @@ export default class PrmPlugin extends Plugin {
 		this.addCommand({
 			id: "rebuild-index",
 			name: "Rebuild index",
-			callback: () => {
-				this.engine.rebuild();
-				this.refreshStatusBar();
-				const d = this.engine.diagnostics();
-				new Notice(
-					`${d.personFilesFound} people · ${d.journalFilesDated}/${d.journalFilesScanned} dated notes · ` +
-						`${d.interactionsFound} interactions · ${d.buildMs.toFixed(0)}ms`,
-					6000,
-				);
-			},
+			callback: () => this.rebuildAndReport(),
 		});
+	}
+
+	/**
+	 * Re-derive the index and say what came back.
+	 *
+	 * The index already rebuilds itself on metadata changes, so a manual rebuild
+	 * usually finds exactly what was there before. Reporting the counts is what
+	 * makes it evident that it ran at all.
+	 */
+	rebuildAndReport(): void {
+		this.engine.rebuild();
+		this.refreshStatusBar();
+		const d = this.engine.diagnostics();
+		new Notice(
+			`${d.personFilesFound} ${d.personFilesFound === 1 ? "person" : "people"} · ` +
+				`${d.journalFilesDated}/${d.journalFilesScanned} dated notes · ` +
+				`${d.interactionsFound} interactions · ${d.buildMs.toFixed(0)}ms`,
+			6000,
+		);
 	}
 
 	// ---------------------------------------------------------------------- flows
