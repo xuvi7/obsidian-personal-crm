@@ -40,6 +40,8 @@ interface Range {
 export class PrmEngine {
 	private index = new Map<string, PersonRecord>();
 	private notesByDate = new Map<string, TFile[]>();
+	/** Exclusion fragments, tokenized once per rebuild rather than per file. */
+	private exclusionTokens: string[][] = [];
 	private listeners = new Set<() => void>();
 	private diag: PrmDiagnostics = emptyDiagnostics();
 
@@ -115,6 +117,10 @@ export class PrmEngine {
 		const started = performance.now();
 		const today = todayISO();
 		const diag = emptyDiagnostics();
+
+		this.exclusionTokens = this.settings.personExclusions
+			.map((fragment) => nameTokens(fragment))
+			.filter((tokens) => tokens.length > 0);
 
 		const people = new Map<string, PersonRecord>();
 		let skipped = 0;
@@ -240,15 +246,13 @@ export class PrmEngine {
 		const inFolder = this.settings.personFolders.some(
 			(f) => f.length > 0 && isInFolder(file.path, f),
 		);
-		const hasTag = this.hasPersonTag(cache);
-		const hasType = this.hasPersonType(cache);
 
-		// Tags and type markers admit people from anywhere in the vault.
-		const claimed = inFolder || hasTag || hasType;
-		if (!claimed) return "unrelated";
-
-		if (inFolder && this.settings.requireTagOrType && !hasTag && !hasType) {
-			return "skipped";
+		// Only ask about tags and markers when the answer can still change the
+		// outcome: a file already inside a people folder is claimed either way.
+		if (!inFolder) {
+			if (!this.hasPersonTag(cache) && !this.hasPersonType(cache)) return "unrelated";
+		} else if (this.settings.requireTagOrType) {
+			if (!this.hasPersonTag(cache) && !this.hasPersonType(cache)) return "skipped";
 		}
 		if (this.isNotAPerson(file, cache)) return "skipped";
 		return "person";
@@ -293,11 +297,16 @@ export class PrmEngine {
 		const tags = cache ? (getAllTags(cache) ?? []) : [];
 		if (tags.some((t) => t.toLowerCase() === "#excalidraw")) return true;
 
-		if (matchesAnyExclusion(file.basename, this.settings.personExclusions)) return true;
+		if (this.exclusionTokens.length > 0 && matchesExclusion(file.basename, this.exclusionTokens)) {
+			return true;
+		}
 
 		// An unrendered template placeholder means this is a template, not a person.
 		for (const value of Object.values(fm)) {
-			if (typeof value === "string" && /\{\{.+\}\}/.test(value)) return true;
+			// includes() first: the regex is far more expensive and almost never matches.
+			if (typeof value === "string" && value.includes("{{") && /\{\{.+\}\}/.test(value)) {
+				return true;
+			}
 		}
 		return false;
 	}
@@ -494,14 +503,15 @@ function nameTokens(value: string): string[] {
  * and "index" is inside "Indexa", so real people were being silently dropped from
  * the index with no explanation. A fragment of several words has to appear as a
  * consecutive run of tokens.
+ *
+ * Fragments arrive already tokenized — re-splitting them for every file in the
+ * vault made the cost scale with files x fragments for no reason.
  */
-function matchesAnyExclusion(basename: string, exclusions: string[]): boolean {
+function matchesExclusion(basename: string, exclusions: string[][]): boolean {
 	const tokens = nameTokens(basename);
 	if (tokens.length === 0) return false;
 
-	for (const raw of exclusions) {
-		const wanted = nameTokens(raw);
-		if (wanted.length === 0) continue;
+	for (const wanted of exclusions) {
 		for (let i = 0; i + wanted.length <= tokens.length; i++) {
 			let all = true;
 			for (let j = 0; j < wanted.length; j++) {
