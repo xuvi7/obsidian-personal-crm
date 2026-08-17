@@ -29,6 +29,18 @@ All notable changes to Personal CRM. Versions follow
 
 ### Fixed
 
+- **An appended contact log no longer revives the empty heading above it.** A
+  section was judged on everything up to the next heading of the *same or higher*
+  level, so a `## Contact log` nested under an empty `# Thoughts` counted as that
+  heading's content. Sections are now judged on their own direct content.
+- **The contact log heading matches the note's own section level** instead of
+  always being `##`. In a note whose sections are `#`, a `##` heading nested the
+  log under whichever section happened to come last — wrong in the outline, and
+  the cause of the bug above.
+- When a note has only template headings, the preview now says which sections are
+  empty ("Nothing written down yet — Facts and Thoughts are empty.") rather than a
+  bare "nothing written", which read as though the preview had failed on a file
+  that visibly has headings in it.
 - Arrow keys no longer jump between people while the caret is in a text field —
   the reach-out shortcuts now stand aside when you're typing.
 

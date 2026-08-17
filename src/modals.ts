@@ -24,7 +24,14 @@ import { addDays, formatDuration, isISODate, relativeToToday, todayISO } from ".
  * are gone. A note straight from a template is mostly placeholder — showing it
  * verbatim fills the preview with nothing.
  */
-export function previewBody(markdown: string): string {
+export interface PreviewContent {
+	/** The markdown worth showing. Empty when the note is all placeholder. */
+	text: string;
+	/** Names of sections that exist but hold nothing, for the empty state. */
+	emptySections: string[];
+}
+
+export function previewBody(markdown: string): PreviewContent {
 	let body = markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
 	// Only leading field lines: a `::` deeper in the note is probably real prose.
 	body = body.replace(/^(?:\s*[A-Za-z][\w -]*::.*(?:\r?\n|$))+/, "");
@@ -32,16 +39,29 @@ export function previewBody(markdown: string): string {
 	body = body.replace(/<%[\s\S]*?%>/g, "").replace(/\{\{[^{}]*\}\}/g, "");
 	// A bullet that is only a label with no value, e.g. "- First met:".
 	body = body.replace(/^[ \t]*[-*+]\s*[^:\n]{1,40}:[ \t]*$/gm, "");
-	return dropEmptySections(body).trim();
+
+	const { kept, empty } = dropEmptySections(body);
+	return {
+		text: kept.replace(/\n{3,}/g, "\n\n").trim(),
+		emptySections: empty,
+	};
 }
 
-/** Remove headings with nothing under them, so they don't fill the preview. */
-function dropEmptySections(markdown: string): string {
+/**
+ * Drop headings that hold nothing themselves.
+ *
+ * A heading is judged on its *direct* content — the scan stops at the next
+ * heading of any level, not just the same or higher. Otherwise a deeper section's
+ * content counts for its parent, so appending a `## Contact log` under an empty
+ * `# Thoughts` would resurrect the empty heading.
+ */
+function dropEmptySections(markdown: string): { kept: string; empty: string[] } {
 	const lines = markdown.split(/\r?\n/);
 	const keep: string[] = [];
+	const empty: string[] = [];
 
 	for (let i = 0; i < lines.length; i++) {
-		const heading = /^(#{1,6})\s+/.exec(lines[i]);
+		const heading = /^(#{1,6})\s+(.*)$/.exec(lines[i]);
 		if (!heading) {
 			keep.push(lines[i]);
 			continue;
@@ -49,18 +69,27 @@ function dropEmptySections(markdown: string): string {
 
 		let hasContent = false;
 		for (let j = i + 1; j < lines.length; j++) {
-			const next = /^(#{1,6})\s+/.exec(lines[j]);
-			// Stop at the next heading of the same or higher level.
-			if (next && next[1].length <= heading[1].length) break;
+			if (/^#{1,6}\s+/.test(lines[j])) break;
 			if (lines[j].replace(/^[ \t]*[-*+]\s*/, "").trim().length > 0) {
 				hasContent = true;
 				break;
 			}
 		}
+
 		if (hasContent) keep.push(lines[i]);
+		else {
+			const name = heading[2].trim();
+			if (name.length > 0) empty.push(name);
+		}
 	}
 
-	return keep.join("\n").replace(/\n{3,}/g, "\n\n");
+	return { kept: keep.join("\n"), empty };
+}
+
+/** "Facts", "Facts and Thoughts", "Facts, Thoughts and Log". */
+function listNames(names: string[]): string {
+	if (names.length <= 1) return names[0] ?? "";
+	return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 /**
@@ -80,18 +109,26 @@ async function renderNotePreview(
 ): Promise<void> {
 	scroller.empty();
 	const raw = await app.vault.cachedRead(file);
-	const body = previewBody(raw);
+	const { text, emptySections } = previewBody(raw);
 
-	if (body.length === 0) {
+	if (text.length === 0) {
+		// Say *why* it's empty. The file usually isn't blank — it has the template's
+		// headings — so "nothing written" on its own reads as though the preview is
+		// broken rather than the note being unfilled.
 		scroller.createEl("p", {
 			cls: "prm-preview-empty",
-			text: "Nothing written about them yet.",
+			text:
+				emptySections.length > 0
+					? `Nothing written down yet — ${listNames(emptySections)} ${
+							emptySections.length === 1 ? "is" : "are"
+						} empty.`
+					: "This note is empty.",
 		});
 		return;
 	}
 
 	const rendered = scroller.createDiv({ cls: "prm-preview-body markdown-rendered" });
-	await MarkdownRenderer.render(app, body, rendered, file.path, component);
+	await MarkdownRenderer.render(app, text, rendered, file.path, component);
 }
 
 function lastContactLabel(record: PersonRecord): string {
