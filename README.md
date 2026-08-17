@@ -191,9 +191,14 @@ can't interfere with normal editor undo. Bind it yourself if you want one.
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md). Note that 1.1.0 changes how contact is
-detected — links in unchecked to-dos, quotes, code blocks and embeds no longer
-count — so some people may appear less recently contacted after upgrading.
+See [CHANGELOG.md](CHANGELOG.md).
+
+- **1.2.0 requires Obsidian 1.13.0** for its declarative settings API, which puts
+  every setting in Obsidian's settings search. Older Obsidian versions are served
+  1.1.0 automatically.
+- **1.1.0 changed how contact is detected** — links in unchecked to-dos, quotes,
+  code blocks and embeds no longer count — so some people may appear less
+  recently contacted after upgrading.
 
 ## Development
 

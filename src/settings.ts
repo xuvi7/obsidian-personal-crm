@@ -1,9 +1,10 @@
 import {
-	AbstractInputSuggest,
 	App,
 	Notice,
 	PluginSettingTab,
-	Setting,
+	SettingDefinitionItem,
+	SettingDefinitionPage,
+	SettingGroupItem,
 	TFolder,
 	normalizePath,
 } from "obsidian";
@@ -143,540 +144,589 @@ function splitList(raw: string): string[] {
 		.filter((v) => v.length > 0);
 }
 
-/** Folder autocomplete for the path fields. */
-class FolderSuggest extends AbstractInputSuggest<TFolder> {
-	constructor(
-		app: App,
-		private input: HTMLInputElement,
-		private onPick: (path: string) => void,
-	) {
-		super(app, input);
-	}
+/** Settings that hold a list but are edited as one comma-separated field. */
+const CSV_KEYS: Record<string, "personTags" | "personExclusions" | "createdDateKeys"> = {
+	personTagsCsv: "personTags",
+	personExclusionsCsv: "personExclusions",
+	createdDateKeysCsv: "createdDateKeys",
+};
 
-	protected getSuggestions(query: string): TFolder[] {
-		const q = query.toLowerCase();
-		const out: TFolder[] = [];
-		for (const file of this.app.vault.getAllLoadedFiles()) {
-			if (file instanceof TFolder && file.path.toLowerCase().contains(q)) out.push(file);
-			if (out.length >= 50) break;
-		}
-		return out;
-	}
-
-	renderSuggestion(folder: TFolder, el: HTMLElement): void {
-		el.setText(folder.path === "/" ? "(vault root)" : folder.path);
-	}
-
-	selectSuggestion(folder: TFolder): void {
-		this.input.value = folder.path;
-		this.onPick(folder.path);
-		this.input.trigger("input");
-		this.close();
-	}
-}
-
+/**
+ * Declarative settings.
+ *
+ * `getSettingDefinitions` describes the settings instead of rendering them, which
+ * is what lets Obsidian index them for settings search. When it returns a
+ * non-empty array the deprecated `display()` is never called, so there isn't one.
+ */
 export class PrmSettingTab extends PluginSettingTab {
 	constructor(app: App, private plugin: PrmPlugin) {
 		super(app, plugin);
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
+	// ------------------------------------------------------------- value routing
+
+	/**
+	 * Read a control's value. A key is either a settings property, a synthetic
+	 * `…Csv` key for a list edited as text, or a dotted path into one of the
+	 * collections (`journalSources.0.folder`).
+	 */
+	getControlValue(key: string): unknown {
 		const s = this.plugin.settings;
+		const parts = key.split(".");
 
-		this.renderDiagnostics(containerEl);
-		this.renderPeople(containerEl, s);
-		this.renderJournals(containerEl, s);
-		this.renderContactRules(containerEl, s);
-		this.renderTiers(containerEl, s);
-		this.renderReminders(containerEl, s);
-		this.renderContacts(containerEl);
-		this.renderMaintenance(containerEl);
+		if (parts.length > 1) {
+			const index = Number(parts[1]);
+			switch (parts[0]) {
+				case "personFolders":
+					return s.personFolders[index] ?? "";
+				case "journalSources": {
+					const source = s.journalSources[index];
+					if (!source) return "";
+					return parts[2] === "folder" ? source.folder : source.format;
+				}
+				case "tiers": {
+					const tier = s.tiers[index];
+					if (!tier) return "";
+					if (parts[2] === "label") return tier.label;
+					if (parts[2] === "cadenceDays") return tier.cadenceDays;
+					if (parts[2] === "color") return tier.color;
+					return "";
+				}
+			}
+			return "";
+		}
+
+		const csv = CSV_KEYS[key];
+		if (csv) return s[csv].join(", ");
+
+		return (s as unknown as Record<string, unknown>)[key];
 	}
 
-	/** Real counts, so a misconfigured folder is visible instead of looking empty. */
-	private renderDiagnostics(containerEl: HTMLElement): void {
+	setControlValue(key: string, value: unknown): void {
+		const s = this.plugin.settings;
+		const parts = key.split(".");
+
+		if (parts.length > 1) {
+			const index = Number(parts[1]);
+			switch (parts[0]) {
+				case "personFolders":
+					s.personFolders[index] = cleanFolderPath(String(value));
+					break;
+				case "journalSources": {
+					const source = s.journalSources[index];
+					if (!source) break;
+					if (parts[2] === "folder") source.folder = cleanFolderPath(String(value));
+					else source.format = String(value).trim();
+					break;
+				}
+				case "tiers": {
+					const tier = s.tiers[index];
+					if (!tier) break;
+					if (parts[2] === "label") tier.label = String(value);
+					else if (parts[2] === "cadenceDays") {
+						const n = Number(value);
+						if (Number.isFinite(n) && n >= 1) tier.cadenceDays = Math.round(n);
+					} else if (parts[2] === "color") tier.color = String(value);
+					break;
+				}
+			}
+			void this.plugin.saveSettings();
+			return;
+		}
+
+		const csv = CSV_KEYS[key];
+		if (csv) {
+			const list = splitList(String(value));
+			// Tags are stored without the leading #.
+			s[csv] = csv === "personTags" ? list.map((t) => t.replace(/^#/, "")) : list;
+			void this.plugin.saveSettings();
+			return;
+		}
+
+		(s as unknown as Record<string, unknown>)[key] = value;
+		void this.plugin.saveSettings();
+
+		// The status bar can appear or disappear without the index changing.
+		if (key === "showStatusBar") this.plugin.refreshStatusBar();
+	}
+
+	// -------------------------------------------------------------- definitions
+
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [
+			this.statusDefinition(),
+			this.peopleGroup(),
+			this.personFoldersList(),
+			this.journalGroup(),
+			this.journalSourcesList(),
+			this.contactRulesGroup(),
+			this.tiersList(),
+			this.tierDefaultGroup(),
+			this.remindersGroup(),
+			this.maintenanceGroup(),
+		];
+	}
+
+	/** Real counts, so a misconfigured folder is visible rather than looking empty. */
+	private statusDefinition(): SettingDefinitionItem {
 		const d = this.plugin.engine.diagnostics();
-		const box = containerEl.createDiv({ cls: "prm-diagnostics" });
+		const stats = this.plugin.engine.stats();
 
-		const line = (text: string, cls?: string) =>
-			box.createDiv({ cls: cls ? `prm-diag-line ${cls}` : "prm-diag-line", text });
+		const desc = createFragment((frag) => {
+			const line = (text: string, bad = false) => {
+				const el = frag.createDiv({ cls: "prm-diag-line", text });
+				if (bad) el.addClass("prm-diag-bad");
+			};
 
-		line(
-			`${d.personFilesFound} ${d.personFilesFound === 1 ? "person" : "people"} found` +
-				(d.personFilesSkipped > 0 ? ` (${d.personFilesSkipped} notes skipped)` : ""),
-			d.personFilesFound === 0 ? "prm-diag-bad" : undefined,
-		);
-		line(
-			`${d.journalFilesScanned} notes in your dated folders, ${d.journalFilesDated} with a readable date`,
-			d.journalFilesScanned > 0 && d.journalFilesDated === 0 ? "prm-diag-bad" : undefined,
-		);
-		line(`${d.interactionsFound} interactions derived · indexed in ${d.buildMs.toFixed(0)}ms`);
-
-		if (d.missingFolders.length > 0) {
-			line(`Folders that don't exist: ${d.missingFolders.join(", ")}`, "prm-diag-bad");
-		}
-		if (d.personFilesFound === 0) {
-			line("Check the people folder below — nothing matched.", "prm-diag-hint");
-		} else if (d.journalFilesScanned > 0 && d.journalFilesDated === 0) {
 			line(
-				"None of those filenames matched your date format. Copy the format from Daily Notes or Periodic Notes settings.",
-				"prm-diag-hint",
+				`${d.personFilesFound} ${d.personFilesFound === 1 ? "person" : "people"} found` +
+					(d.personFilesSkipped > 0 ? ` (${d.personFilesSkipped} notes skipped)` : ""),
+				d.personFilesFound === 0,
 			);
-		}
-	}
-
-	private renderPeople(containerEl: HTMLElement, s: PrmSettings): void {
-		new Setting(containerEl).setName("Who counts as a person").setHeading();
-
-		new Setting(containerEl)
-			.setName("People folders")
-			.setDesc("Comma-separated. Subfolders are included.")
-			.addText((t) => {
-				t.setPlaceholder("People")
-					.setValue(s.personFolders.join(", "))
-					.onChange(async (v) => {
-						s.personFolders = splitList(v).map(cleanFolderPath).filter((p) => p.length > 0);
-						await this.plugin.saveSettings();
-					});
-				new FolderSuggest(this.app, t.inputEl, (path) => {
-					s.personFolders = [cleanFolderPath(path)];
-					void this.plugin.saveSettings();
+			line(
+				`${d.journalFilesScanned} notes in your dated folders, ${d.journalFilesDated} with a readable date`,
+				d.journalFilesScanned > 0 && d.journalFilesDated === 0,
+			);
+			line(
+				`${d.interactionsFound} interactions · ${stats.tracked} tracked, ` +
+					`${stats.untracked} unclassified · indexed in ${d.buildMs.toFixed(0)}ms`,
+			);
+			if (d.missingFolders.length > 0) {
+				line(`These folders don't exist: ${d.missingFolders.join(", ")}`, true);
+			}
+			if (d.personFilesFound === 0) {
+				frag.createDiv({
+					cls: "prm-diag-hint",
+					text: "Nothing matched. Check the people folders below.",
 				});
-				return t;
-			});
-
-		new Setting(containerEl)
-			.setName("Person tags")
-			.setDesc(
-				"Comma-separated, without #. Matched as a prefix, so `person` also matches #person/work. People with these tags are included wherever they live.",
-			)
-			.addText((t) =>
-				t
-					.setPlaceholder("person, people")
-					.setValue(s.personTags.join(", "))
-					.onChange(async (v) => {
-						s.personTags = splitList(v).map((x) => x.replace(/^#/, ""));
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("Person frontmatter marker")
-			.setDesc('For vaults that use a type field, e.g. key "type" and value "person".')
-			.addText((t) =>
-				t
-					.setPlaceholder("type")
-					.setValue(s.personTypeKey)
-					.onChange(async (v) => {
-						s.personTypeKey = v.trim();
-						await this.plugin.saveSettings();
-					}),
-			)
-			.addText((t) =>
-				t
-					.setPlaceholder("person")
-					.setValue(s.personTypeValue)
-					.onChange(async (v) => {
-						s.personTypeValue = v.trim();
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("Require a tag or marker inside the folders")
-			.setDesc(
-				"Off means every note in the people folders is a person. Turn on if those folders hold other things.",
-			)
-			.addToggle((t) =>
-				t.setValue(s.requireTagOrType).onChange(async (v) => {
-					s.requireTagOrType = v;
-					await this.plugin.saveSettings();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("Never treat these as people")
-			.setDesc("Comma-separated fragments matched against the note title, case-insensitive.")
-			.addText((t) =>
-				t
-					.setValue(s.personExclusions.join(", "))
-					.onChange(async (v) => {
-						s.personExclusions = splitList(v);
-						await this.plugin.saveSettings();
-					}),
-			);
-	}
-
-	private renderJournals(containerEl: HTMLElement, s: PrmSettings): void {
-		new Setting(containerEl).setName("Where interactions come from").setHeading();
-		containerEl.createEl("p", {
-			cls: "prm-settings-hint",
-			text: "Any note in these folders that links to a person counts as an interaction on that note's date. The format is a moment.js pattern — the same one Daily Notes and Periodic Notes use, so you can paste yours in.",
-		});
-
-		s.journalSources.forEach((source, index) => {
-			const setting = new Setting(containerEl).setClass("prm-source-setting");
-
-			setting.addText((t) => {
-				t.setPlaceholder("Folder")
-					.setValue(source.folder)
-					.onChange(async (v) => {
-						source.folder = cleanFolderPath(v);
-						await this.plugin.saveSettings();
-					});
-				new FolderSuggest(this.app, t.inputEl, (path) => {
-					source.folder = cleanFolderPath(path);
-					void this.plugin.saveSettings();
+			} else if (d.journalFilesScanned > 0 && d.journalFilesDated === 0) {
+				frag.createDiv({
+					cls: "prm-diag-hint",
+					text: "No filenames matched your date format. Copy it from your Daily Notes or Periodic Notes settings.",
 				});
-				return t;
-			});
-
-			setting.addText((t) =>
-				t
-					.setPlaceholder("YYYY-MM-DD")
-					.setValue(source.format)
-					.onChange(async (v) => {
-						source.format = v.trim();
-						await this.plugin.saveSettings();
-					}),
-			);
-
-			setting.addExtraButton((b) =>
-				b
-					.setIcon("trash-2")
-					.setTooltip("Remove this source")
-					.onClick(async () => {
-						s.journalSources.splice(index, 1);
-						await this.plugin.saveSettings();
-						this.display();
-					}),
-			);
+			}
 		});
 
-		new Setting(containerEl)
-			.addButton((b) =>
-				b.setButtonText("Add folder").onClick(async () => {
-					s.journalSources.push({ folder: "", format: "YYYY-MM-DD" });
-					await this.plugin.saveSettings();
-					this.display();
-				}),
-			)
-			.addButton((b) =>
-				b
-					.setButtonText("Detect from Daily Notes")
-					.setTooltip("Read folder and format from Periodic Notes or core Daily Notes")
-					.onClick(async () => {
-						const found = await this.plugin.detectJournalSources();
-						this.display();
-						new Notice(
-							found
-								? "Picked up your daily note folder and format."
-								: "Couldn't find Daily Notes or Periodic Notes settings.",
-						);
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("Also try common date formats")
-			.setDesc(
-				"Recommended if your vault accumulated more than one naming convention over the years.",
-			)
-			.addToggle((t) =>
-				t.setValue(s.allowFallbackDateFormats).onChange(async (v) => {
-					s.allowFallbackDateFormats = v;
-					await this.plugin.saveSettings();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("Date field fallback")
-			.setDesc(
-				"When a filename has no date, use this frontmatter field. Lets a note-per-meeting workflow work. Leave empty to disable.",
-			)
-			.addText((t) =>
-				t
-					.setPlaceholder("date")
-					.setValue(s.journalDateKey)
-					.onChange(async (v) => {
-						s.journalDateKey = v.trim();
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("Creation date fields")
-			.setDesc(
-				"Used as the starting point for someone you've never contacted. First match wins; falls back to the file's timestamp.",
-			)
-			.addText((t) =>
-				t.setValue(s.createdDateKeys.join(", ")).onChange(async (v) => {
-					s.createdDateKeys = splitList(v);
-					await this.plugin.saveSettings();
-				}),
-			);
+		return {
+			name: "Status",
+			desc,
+			aliases: ["diagnostics", "counts", "troubleshooting", "empty dashboard"],
+		};
 	}
 
-	private renderContactRules(containerEl: HTMLElement, s: PrmSettings): void {
-		new Setting(containerEl).setName("How contact is counted").setHeading();
-
-		new Setting(containerEl)
-			.setName("Links in dated notes count as contact")
-			.setDesc(
-				"Recommended. Your journal already names who you saw, so contact history builds itself. Individual people can opt out with prm-ignore-journal: true.",
-			)
-			.addToggle((t) =>
-				t.setValue(s.journalMentionsCountAsContact).onChange(async (v) => {
-					s.journalMentionsCountAsContact = v;
-					await this.plugin.saveSettings();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("Ignore mentions that aren't contact")
-			.setDesc(
-				"Skips links inside unchecked to-dos, quotes, code blocks and embeds — so writing “TODO: reach out to [[X]]” doesn't mark them as contacted and silence the reminder.",
-			)
-			.addToggle((t) =>
-				t.setValue(s.ignoreIntentLinks).onChange(async (v) => {
-					s.ignoreIntentLinks = v;
-					await this.plugin.saveSettings();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("Due soon window")
-			.setDesc("Days before the due date that someone starts showing as coming up.")
-			.addSlider((sl) =>
-				sl
-					.setLimits(0, 30, 1)
-					.setValue(s.dueSoonWindowDays)
-					.onChange(async (v) => {
-						s.dueSoonWindowDays = v;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("Write a log line into the note body")
-			.setDesc("Adds a dated bullet under a heading, so the note keeps a readable history.")
-			.addToggle((t) =>
-				t.setValue(s.logToBody).onChange(async (v) => {
-					s.logToBody = v;
-					await this.plugin.saveSettings();
-					this.display();
-				}),
-			);
-
-		if (s.logToBody) {
-			new Setting(containerEl).setName("Log heading").addText((t) =>
-				t.setValue(s.bodyLogHeading).onChange(async (v) => {
-					s.bodyLogHeading = v.trim() || "Contact log";
-					await this.plugin.saveSettings();
-				}),
-			);
-
-			new Setting(containerEl)
-				.setName("Link that day's note")
-				.setDesc(
-					"Writes the date as a wikilink when a note for that day exists, so each log line points at it.",
-				)
-				.addToggle((t) =>
-					t.setValue(s.linkDailyNoteInLog).onChange(async (v) => {
-						s.linkDailyNoteInLog = v;
-						await this.plugin.saveSettings();
-					}),
-				);
-		}
+	private peopleGroup(): SettingDefinitionItem {
+		return {
+			type: "group",
+			heading: "Who counts as a person",
+			items: [
+				{
+					name: "Person tags",
+					desc: "Comma-separated, without #. Matched as a prefix, so person also claims #person/work. People with these tags are found anywhere in the vault.",
+					aliases: ["tag", "hierarchical"],
+					control: { type: "text", key: "personTagsCsv", placeholder: "person, people" },
+				},
+				{
+					name: "Person frontmatter field",
+					desc: "For vaults that mark people with a field of their own.",
+					aliases: ["type", "frontmatter", "metadata"],
+					control: { type: "text", key: "personTypeKey", placeholder: "type" },
+				},
+				{
+					name: "Person frontmatter value",
+					desc: "The value that field must have. Leave empty to accept any value.",
+					visible: () => this.plugin.settings.personTypeKey.length > 0,
+					control: { type: "text", key: "personTypeValue", placeholder: "person" },
+				},
+				{
+					name: "Require a tag or field inside the folders",
+					desc: "Off means every note in the people folders is a person. Turn on if those folders hold other things too.",
+					control: { type: "toggle", key: "requireTagOrType" },
+				},
+				{
+					name: "Never treat these as people",
+					desc: "Comma-separated fragments matched against the note title, case-insensitive.",
+					aliases: ["exclude", "template", "ignore"],
+					control: {
+						type: "text",
+						key: "personExclusionsCsv",
+						placeholder: "template, MOC, index",
+					},
+				},
+			],
+		};
 	}
 
-	private renderTiers(containerEl: HTMLElement, s: PrmSettings): void {
-		new Setting(containerEl).setName("Tiers").setHeading();
-		containerEl.createEl("p", {
-			cls: "prm-settings-hint",
-			text: "A tier sets how often you want to be in touch. Assign one from the dashboard, or with prm-tier. A per-person prm-cadence overrides the tier.",
-		});
+	private personFoldersList(): SettingDefinitionItem {
+		const folders = this.plugin.settings.personFolders;
 
-		for (const tier of s.tiers) {
-			const setting = new Setting(containerEl).setClass("prm-tier-setting");
+		return {
+			type: "list",
+			heading: "People folders",
+			emptyState: "No folders. Add one, or identify people by tag or field above.",
+			items: folders.map((folder, index) => ({
+				name: `Folder ${index + 1}`,
+				desc: this.folderExists(folder) ? undefined : "This folder doesn't exist.",
+				control: {
+					type: "folder" as const,
+					key: `personFolders.${index}`,
+					placeholder: "People",
+					includeRoot: false,
+				},
+			})),
+			onDelete: (index: number) => {
+				folders.splice(index, 1);
+				void this.plugin.saveSettings();
+				this.update();
+			},
+			addItem: {
+				name: "Add a people folder",
+				action: () => {
+					folders.push("");
+					void this.plugin.saveSettings();
+					this.update();
+				},
+			},
+		};
+	}
 
-			setting.addText((t) =>
-				t
-					.setPlaceholder("Label")
-					.setValue(tier.label)
-					.onChange(async (v) => {
-						tier.label = v;
-						await this.plugin.saveSettings();
-					}),
-			);
+	private journalGroup(): SettingDefinitionItem {
+		return {
+			type: "group",
+			heading: "Where interactions come from",
+			items: [
+				{
+					name: "Also try common date formats",
+					desc: "Recommended if your vault accumulated more than one naming convention over the years.",
+					aliases: ["fallback", "legacy"],
+					control: { type: "toggle", key: "allowFallbackDateFormats" },
+				},
+				{
+					name: "Date field fallback",
+					desc: "When a filename has no date, use this frontmatter field instead. This is what makes a note-per-meeting workflow work. Leave empty to disable.",
+					aliases: ["meeting", "frontmatter date"],
+					control: { type: "text", key: "journalDateKey", placeholder: "date" },
+				},
+				{
+					name: "Creation date fields",
+					desc: "The starting point for someone you've never contacted. First match wins; falls back to the file's timestamp.",
+					aliases: ["created", "ctime", "baseline"],
+					control: {
+						type: "text",
+						key: "createdDateKeysCsv",
+						placeholder: "created, date created",
+					},
+				},
+				{
+					name: "Detect from Daily Notes",
+					desc: "Read the folder and date format from Periodic Notes or core Daily Notes.",
+					aliases: ["periodic notes", "autodetect"],
+					action: () => {
+						void (async () => {
+							const found = await this.plugin.detectJournalSources();
+							this.update();
+							new Notice(
+								found
+									? "Picked up your daily note folder and format."
+									: "Couldn't find Daily Notes or Periodic Notes settings.",
+							);
+						})();
+					},
+				},
+			],
+		};
+	}
 
-			setting.addText((t) => {
-				t.setPlaceholder("Days")
-					.setValue(String(tier.cadenceDays))
-					.onChange(async (v) => {
-						const n = Number(v);
-						if (Number.isFinite(n) && n > 0) {
-							tier.cadenceDays = Math.round(n);
-							await this.plugin.saveSettings();
-						}
-					});
-				t.inputEl.type = "number";
-				t.inputEl.addClass("prm-tier-days");
-				return t;
-			});
+	private journalSourcesList(): SettingDefinitionItem {
+		const sources = this.plugin.settings.journalSources;
+		const d = this.plugin.engine.diagnostics();
+		const nothingDated = d.journalFilesScanned > 0 && d.journalFilesDated === 0;
 
-			setting.addColorPicker((c) =>
-				c.setValue(tier.color).onChange(async (v) => {
-					tier.color = v;
-					await this.plugin.saveSettings();
-				}),
-			);
+		const pages: SettingDefinitionPage[] = sources.map((source, index) => ({
+			type: "page" as const,
+			name: source.folder.length > 0 ? source.folder : `Source ${index + 1}`,
+			desc: "A folder of dated notes, and the format its filenames use.",
+			displayValue: () => source.format || "no format",
+			// Flag a folder that doesn't resolve, or one where nothing could be dated.
+			status: () => (!this.folderExists(source.folder) || nothingDated ? "warning" : null),
+			items: [
+				{
+					name: "Folder",
+					desc: this.folderExists(source.folder)
+						? undefined
+						: "This folder doesn't exist.",
+					control: {
+						type: "folder" as const,
+						key: `journalSources.${index}.folder`,
+						placeholder: "Daily Notes",
+						includeRoot: false,
+					},
+				},
+				{
+					name: "Date format",
+					desc: "A moment.js pattern — the same one Daily Notes and Periodic Notes use, so you can paste yours in. Folder-nesting patterns work too.",
+					control: {
+						type: "text" as const,
+						key: `journalSources.${index}.format`,
+						placeholder: "YYYY-MM-DD",
+						validate: (value: string) =>
+							value.trim().length === 0 ? "Enter a date format." : undefined,
+					},
+				},
+			],
+		}));
 
-			setting.addExtraButton((b) =>
-				b
-					.setIcon("trash-2")
-					.setTooltip(`Remove "${tier.label}"`)
-					.onClick(() => {
-						// Deleting a tier silently untracks everyone on it, so say so first.
-						const affected = this.plugin.engine
-							.all()
-							.filter((r) => r.tierId === tier.id).length;
+		return {
+			type: "list",
+			heading: "Dated note folders",
+			emptyState: "No folders yet. Add one, or use Detect from Daily Notes above.",
+			items: pages,
+			onDelete: (index: number) => {
+				sources.splice(index, 1);
+				void this.plugin.saveSettings();
+				this.update();
+			},
+			addItem: {
+				name: "Add a dated folder",
+				action: () => {
+					sources.push({ folder: "", format: "YYYY-MM-DD" });
+					void this.plugin.saveSettings();
+					this.update();
+				},
+			},
+		};
+	}
 
-						const remove = () => {
-							s.tiers = s.tiers.filter((x) => x.id !== tier.id);
-							if (s.defaultTierId === tier.id) s.defaultTierId = s.tiers[0]?.id ?? "";
-							void this.plugin.saveSettings();
-							this.display();
-						};
+	private contactRulesGroup(): SettingDefinitionItem {
+		const items: SettingGroupItem[] = [
+			{
+				name: "Links in dated notes count as contact",
+				desc: "Recommended. Your journal already names who you saw, so contact history builds itself. Individual people can opt out with prm-ignore-journal.",
+				control: { type: "toggle", key: "journalMentionsCountAsContact" },
+			},
+			{
+				name: "Ignore mentions that aren't contact",
+				desc: "Skips links inside unchecked to-dos, quotes, code blocks and embeds — so writing a reminder to reach out to someone doesn't mark them as contacted and silence it.",
+				aliases: ["todo", "task", "embed", "quote"],
+				control: { type: "toggle", key: "ignoreIntentLinks" },
+			},
+			{
+				name: "Due soon window",
+				desc: "How long before the due date someone starts showing as coming up.",
+				control: {
+					type: "slider",
+					key: "dueSoonWindowDays",
+					min: 0,
+					max: 30,
+					step: 1,
+					displayFormat: (v: number) => (v === 0 ? "off" : `${v} days`),
+				},
+			},
+			{
+				name: "Write a log line into the note body",
+				desc: "Adds a dated bullet under a heading, so the note keeps a readable history.",
+				control: { type: "toggle", key: "logToBody" },
+			},
+			{
+				name: "Log heading",
+				visible: () => this.plugin.settings.logToBody,
+				control: {
+					type: "text",
+					key: "bodyLogHeading",
+					placeholder: "Contact log",
+					validate: (value: string) =>
+						value.trim().length === 0 ? "Enter a heading." : undefined,
+				},
+			},
+			{
+				name: "Link that day's note",
+				desc: "Writes the date as a wikilink when a note for that day exists, so each log line points at it.",
+				visible: () => this.plugin.settings.logToBody,
+				control: { type: "toggle", key: "linkDailyNoteInLog" },
+			},
+		];
 
-						if (affected === 0) {
-							remove();
-							return;
-						}
-						new ConfirmModal(
-							this.app,
-							`Remove "${tier.label}"?`,
-							`${affected} ${affected === 1 ? "person is" : "people are"} on this tier. ` +
-								"Removing it stops tracking them until you assign a new one. " +
-								"Their notes aren't changed.",
-							"Remove tier",
-							remove,
-						).open();
-					}),
-			);
+		return { type: "group", heading: "How contact is counted", items };
+	}
 
-			setting.nameEl.setText(tier.id);
-			setting.nameEl.addClass("prm-tier-id");
-		}
+	private tiersList(): SettingDefinitionItem {
+		const tiers = this.plugin.settings.tiers;
 
-		new Setting(containerEl).addButton((b) =>
-			b
-				.setButtonText("Add tier")
-				.setCta()
-				.onClick(async () => {
+		const pages: SettingDefinitionPage[] = tiers.map((tier, index) => ({
+			type: "page" as const,
+			name: tier.label,
+			desc: `Stored as prm-tier: ${tier.id}`,
+			displayValue: () => `every ${formatDuration(tier.cadenceDays)}`,
+			items: [
+				{
+					name: "Label",
+					control: {
+						type: "text" as const,
+						key: `tiers.${index}.label`,
+						placeholder: "Close",
+					},
+				},
+				{
+					name: "Contact every",
+					desc: "Days between one contact and the next being due.",
+					control: {
+						type: "number" as const,
+						key: `tiers.${index}.cadenceDays`,
+						min: 1,
+						step: 1,
+						validate: (value: number) =>
+							!Number.isFinite(value) || value < 1 ? "Enter at least 1 day." : undefined,
+					},
+				},
+				{
+					name: "Colour",
+					control: { type: "color" as const, key: `tiers.${index}.color` },
+				},
+			],
+		}));
+
+		return {
+			type: "list",
+			heading: "Tiers",
+			emptyState: "No tiers. Add one — nobody is tracked until they have a tier.",
+			items: pages,
+			onReorder: (oldIndex: number, newIndex: number) => {
+				const [moved] = tiers.splice(oldIndex, 1);
+				if (moved) tiers.splice(newIndex, 0, moved);
+				void this.plugin.saveSettings();
+				this.update();
+			},
+			onDelete: (index: number) => {
+				const tier = tiers[index];
+				if (!tier) return;
+
+				const affected = this.plugin.engine.all().filter((r) => r.tierId === tier.id).length;
+				const remove = () => {
+					tiers.splice(index, 1);
+					const s = this.plugin.settings;
+					if (s.defaultTierId === tier.id) s.defaultTierId = tiers[0]?.id ?? "";
+					void this.plugin.saveSettings();
+					this.update();
+				};
+
+				// Deleting a tier silently untracks everyone on it, so say so first.
+				if (affected === 0) {
+					remove();
+					return;
+				}
+				new ConfirmModal(
+					this.app,
+					`Remove "${tier.label}"?`,
+					`${affected} ${affected === 1 ? "person is" : "people are"} on this tier. ` +
+						"Removing it stops tracking them until you assign a new one. Their notes aren't changed.",
+					"Remove tier",
+					remove,
+				).open();
+			},
+			addItem: {
+				name: "Add a tier",
+				action: () => {
+					const s = this.plugin.settings;
 					let id = "new-tier";
 					let n = 2;
 					while (s.tiers.some((t) => t.id === id)) id = `new-tier-${n++}`;
 					s.tiers.push({ id, label: "New tier", cadenceDays: 60, color: "#888888" });
-					await this.plugin.saveSettings();
-					this.display();
-				}),
-		);
-
-		if (s.tiers.length > 0) {
-			new Setting(containerEl)
-				.setName("Default tier")
-				.setDesc("Pre-selected during triage.")
-				.addDropdown((d) => {
-					for (const tier of s.tiers) d.addOption(tier.id, tier.label);
-					d.setValue(s.defaultTierId).onChange(async (v) => {
-						s.defaultTierId = v;
-						await this.plugin.saveSettings();
-					});
-				});
-		}
+					void this.plugin.saveSettings();
+					this.update();
+				},
+			},
+		};
 	}
 
-	private renderReminders(containerEl: HTMLElement, s: PrmSettings): void {
-		new Setting(containerEl).setName("Reminders").setHeading();
+	private tierDefaultGroup(): SettingDefinitionItem {
+		const tiers = this.plugin.settings.tiers;
+		const options: Record<string, string> = {};
+		for (const tier of tiers) options[tier.id] = tier.label;
 
-		new Setting(containerEl).setName("Show count in the status bar").addToggle((t) =>
-			t.setValue(s.showStatusBar).onChange(async (v) => {
-				s.showStatusBar = v;
-				await this.plugin.saveSettings();
-				this.plugin.refreshStatusBar();
-			}),
-		);
-
-		new Setting(containerEl)
-			.setName("Notify when Obsidian starts")
-			.setDesc("A quiet nudge listing who's overdue.")
-			.addToggle((t) =>
-				t.setValue(s.notifyOnStartup).onChange(async (v) => {
-					s.notifyOnStartup = v;
-					await this.plugin.saveSettings();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("People per reach-out session")
-			.addSlider((sl) =>
-				sl
-					.setLimits(1, 20, 1)
-					.setValue(s.nextUpCount)
-					.onChange(async (v) => {
-						s.nextUpCount = v;
-						await this.plugin.saveSettings();
-					}),
-			);
+		return {
+			type: "group",
+			items: [
+				{
+					name: "Default tier",
+					desc: "Pre-selected during triage.",
+					visible: () => tiers.length > 0,
+					control: { type: "dropdown", key: "defaultTierId", options },
+				},
+			],
+		};
 	}
 
-	private renderContacts(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName("Contacts").setHeading();
-
-		new Setting(containerEl)
-			.setName("Import from a Google Contacts export")
-			.setDesc(
-				"Fills in email, phone, company, title, location and birthday by matching names. You review every change before anything is written.",
-			)
-			.addButton((b) =>
-				b.setButtonText("Import…").onClick(() => this.plugin.openContactImport()),
-			);
+	private remindersGroup(): SettingDefinitionItem {
+		return {
+			type: "group",
+			heading: "Reminders",
+			items: [
+				{
+					name: "Show count in the status bar",
+					control: { type: "toggle", key: "showStatusBar" },
+				},
+				{
+					name: "Notify when Obsidian starts",
+					desc: "A quiet nudge listing who's overdue.",
+					control: { type: "toggle", key: "notifyOnStartup" },
+				},
+				{
+					name: "People per reach-out session",
+					desc: "How many people the reach-out flow queues up.",
+					control: {
+						type: "slider",
+						key: "nextUpCount",
+						min: 1,
+						max: 20,
+						step: 1,
+						displayFormat: (v: number) => String(v),
+					},
+				},
+			],
+		};
 	}
 
-	private renderMaintenance(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName("Maintenance").setHeading();
-
-		const retained = this.plugin.undo.retainedBytes();
-		new Setting(containerEl)
-			.setName("Undo history")
-			.setDesc(
-				this.plugin.undo.canUndo()
-					? `Next undo: ${this.plugin.undo.peekUndo()?.label} · ${(retained / 1024).toFixed(0)} KB retained`
-					: "Nothing recorded yet this session.",
-			)
-			.addButton((b) =>
-				b
-					.setButtonText("Clear history")
-					.setDisabled(!this.plugin.undo.canUndo() && !this.plugin.undo.canRedo())
-					.onClick(() => {
+	private maintenanceGroup(): SettingDefinitionItem {
+		return {
+			type: "group",
+			heading: "Contacts and maintenance",
+			items: [
+				{
+					name: "Import from a Google Contacts export",
+					desc: "Fills in email, phone, company, title, location and birthday by matching names. You review every change before anything is written.",
+					aliases: ["google", "csv", "vcard", "contacts"],
+					action: () => this.plugin.openContactImport(),
+				},
+				{
+					name: "Clear undo history",
+					desc: this.plugin.undo.canUndo()
+						? `Next undo: ${this.plugin.undo.peekUndo()?.label ?? ""} · ${(
+								this.plugin.undo.retainedBytes() / 1024
+							).toFixed(0)} KB retained`
+						: "Nothing recorded yet this session.",
+					disabled: () => !this.plugin.undo.canUndo() && !this.plugin.undo.canRedo(),
+					action: () => {
 						this.plugin.undo.clear();
-						this.display();
-					}),
-			);
+						this.update();
+					},
+				},
+				{
+					name: "Rebuild index",
+					desc: "Re-scans people and dated notes.",
+					aliases: ["reindex", "refresh"],
+					action: () => {
+						this.plugin.engine.rebuild();
+						this.plugin.refreshStatusBar();
+						this.update();
+					},
+				},
+			],
+		};
+	}
 
-		new Setting(containerEl)
-			.setName("Rebuild index")
-			.setDesc("Re-scans people and dated notes.")
-			.addButton((b) =>
-				b.setButtonText("Rebuild").onClick(() => {
-					this.plugin.engine.rebuild();
-					this.plugin.refreshStatusBar();
-					this.display();
-				}),
-			);
+	// ------------------------------------------------------------------ helpers
+
+	private folderExists(path: string): boolean {
+		if (path.length === 0) return false;
+		return this.app.vault.getAbstractFileByPath(path) instanceof TFolder;
 	}
 }
-
-export { formatDuration };

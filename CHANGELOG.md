@@ -3,6 +3,56 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
+## 1.2.0 — 2026-08-17
+
+Adopts Obsidian's declarative settings API, which raises the minimum Obsidian
+version, and clears the plugin review findings.
+
+### Upgrade notes
+
+**`minAppVersion` is now 1.13.0** (was 1.7.2). This is the version that
+introduced the declarative settings API, and it is not optional: the deprecated
+`display()` path and `getSettingDefinitions()` are mutually exclusive, and
+several other calls (`setDestructive`) are 1.13-only too. Users on Obsidian 1.7
+through 1.12 stay on 1.1.0, which `versions.json` handles automatically.
+
+Your settings carry over untouched.
+
+### Changed
+
+- **Settings are now declarative**, so every setting appears in Obsidian's
+  settings search — including by alias, so searching "periodic notes",
+  "troubleshoot" or "vcard" finds the relevant row.
+- Journal sources and tiers are now proper lists: each entry is its own page
+  showing its current value inline, tiers can be reordered by dragging, and a
+  dated folder that doesn't exist — or whose format matches nothing — is flagged
+  with a warning on the entry itself.
+- Folder fields use Obsidian's built-in folder picker rather than a hand-rolled
+  suggester.
+- The tier-deletion confirmation is an in-app dialog instead of a native
+  `confirm()`, which blocked the whole window.
+
+### Fixed
+
+- A frontmatter value that isn't a scalar — `prm-birthday: {a: b}` — was
+  stringified to the literal `"[object Object]"` and written back into the note.
+  Non-scalar values are now refused.
+- Replaced `builtin-modules` with `node:module`'s `builtinModules`.
+- Frontmatter is read through one helper that types it as `unknown` rather than
+  `any`, so every read site is checked.
+- Obsidian's re-exported `moment` resolves to `any`; date parsing now narrows it
+  to the two methods it uses.
+- Async work no longer returns promises from positions typed as void
+  (`SuggestModal` overrides, button handlers).
+
+### Development
+
+- Added an ESLint setup using `eslint-plugin-obsidianmd` plus
+  typescript-eslint's type-checked rules; `npm run lint` is clean.
+- Added a release workflow that builds from source on a version tag, verifies the
+  tag matches `manifest.json`, and records build provenance attestations so
+  published assets can be traced to a commit.
+
 ## 1.1.0 — 2026-08-17
 
 A correctness, portability and performance pass. The headline change is that the
