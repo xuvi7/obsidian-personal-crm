@@ -1,0 +1,83 @@
+export type PersonStatus =
+	| "overdue"
+	| "due-soon"
+	| "ok"
+	| "snoozed"
+	| "paused"
+	| "untracked";
+
+export interface Tier {
+	/** Stable key written into `prm-tier`. */
+	id: string;
+	label: string;
+	cadenceDays: number;
+	color: string;
+}
+
+/** Where a person's cadence baseline came from, when they've never been contacted. */
+export type BaselineSource = "contact" | "created" | "filesystem" | "none";
+
+export interface PersonRecord {
+	path: string;
+	name: string;
+	aliases: string[];
+
+	// --- from frontmatter ---
+	tierId: string | null;
+	/** True when `prm-tier` names a tier that no longer exists in settings. */
+	tierMissing: boolean;
+	cadenceOverride: number | null;
+	paused: boolean;
+	ignoreJournal: boolean;
+	snoozeUntil: string | null;
+	birthday: string | null;
+	relationship: string | null;
+	createdDate: string | null;
+
+	// --- derived ---
+	/** Distinct dates on which an interaction was recorded, newest first. */
+	contactDates: string[];
+	/** Journal note paths keyed by date, for jumping to the entry. */
+	sources: Map<string, string>;
+	/** Most recent interaction date, or null if never. */
+	lastContact: string | null;
+	/** Number of distinct days a journal mentioned them. */
+	mentionCount: number;
+	/** Resolved cadence in days (tier or override), null when untracked. */
+	cadenceDays: number | null;
+	/** lastContact + cadence, null when untracked. */
+	dueDate: string | null;
+	/** Positive = overdue by N days. Negative = N days of slack left. */
+	overdueDays: number;
+	/** 0..1 progress through the current cadence window. */
+	cadenceProgress: number;
+	status: PersonStatus;
+	baselineSource: BaselineSource;
+	/** Days until next birthday, null when no birthday recorded. */
+	daysUntilBirthday: number | null;
+}
+
+export interface PrmStats {
+	overdue: number;
+	dueSoon: number;
+	tracked: number;
+	untracked: number;
+	paused: number;
+	snoozed: number;
+	total: number;
+	unknownTier: number;
+}
+
+/**
+ * Counts that let the UI explain an empty dashboard instead of implying the user
+ * simply has no one to contact.
+ */
+export interface PrmDiagnostics {
+	personFilesFound: number;
+	personFilesSkipped: number;
+	journalFilesScanned: number;
+	journalFilesDated: number;
+	interactionsFound: number;
+	missingFolders: string[];
+	buildMs: number;
+}

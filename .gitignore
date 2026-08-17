@@ -1,0 +1,8 @@
+node_modules/
+main.js
+*.js.map
+.DS_Store
+data.json
+
+# Local, machine-specific build helper
+deploy.local.sh

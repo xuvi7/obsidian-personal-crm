@@ -1,0 +1,35 @@
+{
+  "name": "obsidian-personal-crm",
+  "version": "1.1.0",
+  "description": "Personal relationship manager for Obsidian, built around a People/ folder and journal backlinks.",
+  "main": "main.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "typecheck": "tsc --noEmit --skipLibCheck",
+    "deploy": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "deploy:watch": "node esbuild.config.mjs",
+    "test": "echo \"See CONTRIBUTING notes in README\""
+  },
+  "keywords": [
+    "obsidian",
+    "prm",
+    "crm"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.24.2",
+    "moment": "^2.30.1",
+    "obsidian": "^1.7.2",
+    "tslib": "^2.8.1",
+    "typescript": "^5.7.2"
+  },
+  "allowScripts": {
+    "esbuild@0.24.2": true
+  },
+  "author": "xuvi"
+}
