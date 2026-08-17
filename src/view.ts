@@ -71,8 +71,14 @@ export class PrmDashboardView extends ItemView {
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("prm-view");
-		this.headerEl = root.createDiv({ cls: "prm-header" });
-		this.toolbarEl = root.createDiv({ cls: "prm-toolbar" });
+
+		// The header and toolbar sit in a fixed pane and the list scrolls on its
+		// own, rather than the whole view scrolling under a sticky header. Sticky
+		// positioning let rows show through above the header, and only covered the
+		// header — leaving the filter tabs to scroll away.
+		const chrome = root.createDiv({ cls: "prm-chrome" });
+		this.headerEl = chrome.createDiv({ cls: "prm-header" });
+		this.toolbarEl = chrome.createDiv({ cls: "prm-toolbar" });
 		this.listEl = root.createDiv({ cls: "prm-list" });
 
 		// One coalesced handler: the engine and the undo stack both fire on a single

@@ -1,9 +1,21 @@
 /* Personal CRM — all colors come from Obsidian theme variables so this
    inherits whatever light/dark theme is active. */
 
+/* Two panes: fixed chrome, scrolling list. The view itself never scrolls, so
+   rows are clipped by the list's own box and cannot appear above the header. */
 .prm-view {
-	padding: 0 1rem 2rem;
-	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 0;
+	overflow: hidden;
+}
+
+.prm-chrome {
+	flex: 0 0 auto;
+	padding: 0.75rem 1rem 0;
+	background: var(--background-primary);
+	border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .prm-muted {
@@ -14,12 +26,8 @@
 /* ------------------------------------------------------------------- header */
 
 .prm-header {
-	position: sticky;
-	top: 0;
-	z-index: 2;
-	background: var(--background-primary);
-	padding-top: 0.75rem;
-	border-bottom: 1px solid var(--background-modifier-border);
+	/* Background and border live on .prm-chrome, which spans the full width. */
+	padding: 0;
 }
 
 .prm-title-row {
@@ -67,7 +75,7 @@
 .prm-stats {
 	display: flex;
 	gap: 1.25rem;
-	padding: 0.6rem 0 0.75rem;
+	padding: 0.6rem 0 0.2rem;
 	flex-wrap: wrap;
 }
 
@@ -104,7 +112,7 @@
 	justify-content: space-between;
 	gap: 0.75rem;
 	flex-wrap: wrap;
-	padding: 0.7rem 0;
+	padding: 0.55rem 0 0.7rem;
 }
 
 .prm-tabs {
@@ -147,6 +155,11 @@
 .prm-list {
 	display: flex;
 	flex-direction: column;
+	flex: 1 1 auto;
+	/* min-height is required for a flex child to actually scroll rather than grow. */
+	min-height: 0;
+	overflow-y: auto;
+	padding: 0 1rem 2rem;
 }
 
 .prm-row {
@@ -708,7 +721,11 @@
 /* Row actions are revealed on hover, which touch devices don't have — and the
    single-line row has nowhere near enough width on a phone. */
 @media (max-width: 700px) {
-	.prm-view {
+	.prm-chrome {
+		padding: 0.5rem 0.5rem 0;
+	}
+
+	.prm-list {
 		padding: 0 0.5rem 2rem;
 	}
 
@@ -721,6 +738,13 @@
 	.prm-row-actions {
 		opacity: 1;
 		justify-content: flex-end;
+	}
+
+	/* Stacked rows put the actions on their own line, which leaves the cadence
+	   hairline detached at the bottom where it reads as belonging to the next
+	   person. It's decorative, so drop it at this width. */
+	.prm-bar {
+		display: none;
 	}
 
 	.prm-search {

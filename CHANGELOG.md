@@ -3,6 +3,21 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
+## 1.2.1 — 2026-08-17
+
+### Fixed
+
+- **The dashboard header and filter tabs are now locked in place.** They were
+  positioned with `position: sticky`, which only covered the header — the filter
+  tabs, search box and sort control scrolled away with the list — and let rows
+  show through above the header as they scrolled. The view is now two panes: the
+  header and toolbar are fixed, and the list is its own scroll container, so rows
+  are clipped by the list's box and cannot appear above the chrome.
+- On narrow screens the cadence hairline sat at each row's absolute bottom.
+  Because stacked rows put the action buttons on their own line, the line read as
+  belonging to the next person's name. It's decorative, so it's hidden at that
+  width.
+
 ## 1.2.0 — 2026-08-17
 
 Adopts Obsidian's declarative settings API, which raises the minimum Obsidian
