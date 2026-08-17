@@ -632,6 +632,12 @@ export default class PrmPlugin extends Plugin {
 			(h) => h.heading.trim().toLowerCase() === target,
 		);
 
+		// Match the note's own top-level sections rather than always using `##`.
+		// A deeper heading would nest the log under whatever section precedes it,
+		// which is wrong in the outline and makes that section look non-empty.
+		const levels = (cache?.headings ?? []).map((h) => h.level);
+		const hashes = "#".repeat(levels.length > 0 ? Math.min(...levels) : 2);
+
 		await this.app.vault.process(file, (data) => {
 			if (match) {
 				const offset = match.position.end.offset;
@@ -641,7 +647,7 @@ export default class PrmPlugin extends Plugin {
 				}
 			}
 			const separator = data.length === 0 || data.endsWith("\n") ? "" : "\n";
-			return `${data}${separator}\n## ${heading}\n${entry}\n`;
+			return `${data}${separator}\n${hashes} ${heading}\n${entry}\n`;
 		});
 	}
 
