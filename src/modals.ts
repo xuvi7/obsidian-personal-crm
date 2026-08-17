@@ -54,6 +54,48 @@ function renderTierChip(el: HTMLElement, tier: Tier | null): void {
 	else chip.addClass("prm-chip-muted");
 }
 
+/**
+ * True when a keystroke is going into a text field. Modal-wide shortcuts have to
+ * stand aside for these, or arrow keys move between people instead of moving the
+ * caret.
+ */
+function isTyping(evt: KeyboardEvent): boolean {
+	const target = evt.target;
+	if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) return true;
+	return target instanceof HTMLElement && target.isContentEditable;
+}
+
+interface NoteEditorOptions {
+	label: string;
+	hint?: string;
+	placeholder: string;
+	value: string;
+	onChange: (value: string) => void;
+	/** Cmd/Ctrl+Enter, so a long note can be committed without reaching for the mouse. */
+	onSubmit?: () => void;
+}
+
+/** A full-width, resizable note box. */
+function noteEditor(parent: HTMLElement, opts: NoteEditorOptions): HTMLTextAreaElement {
+	const field = parent.createDiv({ cls: "prm-note-field" });
+	field.createEl("label", { cls: "prm-note-label", text: opts.label });
+	if (opts.hint) field.createDiv({ cls: "prm-note-hint", text: opts.hint });
+
+	const input = field.createEl("textarea", {
+		cls: "prm-note-input",
+		attr: { rows: "5", placeholder: opts.placeholder, spellcheck: "true" },
+	});
+	input.value = opts.value;
+	input.addEventListener("input", () => opts.onChange(input.value));
+	input.addEventListener("keydown", (evt) => {
+		if (opts.onSubmit && evt.key === "Enter" && (evt.metaKey || evt.ctrlKey)) {
+			evt.preventDefault();
+			opts.onSubmit();
+		}
+	});
+	return input;
+}
+
 // ---------------------------------------------------------------- person picker
 
 export class PersonPickerModal extends FuzzySuggestModal<PersonRecord> {
@@ -369,31 +411,38 @@ export class LogContactModal extends Modal {
 
 		this.error = contentEl.createDiv({ cls: "prm-form-error" });
 
-		new Setting(contentEl)
-			.setName("Note")
-			.setDesc("Optional. Gets appended to the log line.")
-			.addText((t) =>
-				t.setPlaceholder("Caught up over text").onChange((v) => (this.note = v.trim())),
-			);
+		// Full width and multi-line rather than a Setting's narrow control column,
+		// so there's room to actually write and re-read what you wrote.
+		const noteField = noteEditor(contentEl, {
+			label: "Notes",
+			hint: "Optional. Written under the log entry, keeping your line breaks.",
+			placeholder: "What did you talk about?",
+			value: "",
+			onChange: (v) => (this.note = v),
+			onSubmit: () => void this.submit(),
+		});
+		window.setTimeout(() => noteField.focus(), 0);
 
 		new Setting(contentEl)
 			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
 			.addButton((b) => {
 				b.setButtonText("Log it")
 					.setCta()
-					.onClick(async () => {
-						if (!isISODate(this.date)) return;
-						const file = this.app.vault.getAbstractFileByPath(this.record.path);
-						this.close();
-						if (file instanceof TFile) {
-							await this.plugin.logContact(file, this.date, this.note || undefined);
-						}
-					});
+					.onClick(() => void this.submit());
 				this.saveButton = b.buttonEl;
 				return b;
 			});
 
 		this.validate();
+	}
+
+	private async submit(): Promise<void> {
+		if (!isISODate(this.date)) return;
+		const file = this.app.vault.getAbstractFileByPath(this.record.path);
+		this.close();
+		if (file instanceof TFile) {
+			await this.plugin.logContact(file, this.date, this.note.trim() || undefined);
+		}
 	}
 
 	/** Clearing a date input yields "", which would otherwise wipe the stored date. */
@@ -425,6 +474,8 @@ export class ReachOutModal extends Modal {
 	private preview: Component | null = null;
 	private handled = new Set<string>();
 	private busy = false;
+	/** Note drafts by person path, so moving back and forth doesn't lose typing. */
+	private drafts = new Map<string, string>();
 
 	constructor(
 		private plugin: PrmPlugin,
@@ -436,11 +487,15 @@ export class ReachOutModal extends Modal {
 
 	onOpen(): void {
 		if (!Platform.isMobile) {
+			// Returning false leaves the event to the focused field, so the arrows
+			// still move the caret inside the note box.
 			this.scope.register([], "ArrowRight", (e) => {
+				if (isTyping(e)) return false;
 				e.preventDefault();
 				this.step(1);
 			});
 			this.scope.register([], "ArrowLeft", (e) => {
+				if (isTyping(e)) return false;
 				e.preventDefault();
 				this.step(-1);
 			});
@@ -509,19 +564,34 @@ export class ReachOutModal extends Modal {
 			void renderNotePreview(this.app, file, previewEl, this.preview);
 		}
 
-		const actions = contentEl.createDiv({ cls: "prm-reachout-actions" });
-
-		this.actionButton(actions, "check", "Logged it", async () => {
+		const logIt = async () => {
 			if (this.busy) return;
 			this.busy = true;
 			try {
-				if (file instanceof TFile) await this.plugin.logContact(file, todayISO());
+				const note = (this.drafts.get(record.path) ?? "").trim();
+				if (file instanceof TFile) {
+					await this.plugin.logContact(file, todayISO(), note || undefined);
+				}
+				this.drafts.delete(record.path);
 				this.handled.add(record.path);
 			} finally {
 				this.busy = false;
 			}
 			this.advanceOrClose();
+		};
+
+		noteEditor(contentEl, {
+			label: "Notes",
+			hint: "Saved with the contact when you log it. ⌘/Ctrl+Enter to log.",
+			placeholder: "What did you talk about?",
+			value: this.drafts.get(record.path) ?? "",
+			onChange: (v) => this.drafts.set(record.path, v),
+			onSubmit: () => void logIt(),
 		});
+
+		const actions = contentEl.createDiv({ cls: "prm-reachout-actions" });
+
+		this.actionButton(actions, "check", "Logged it", logIt);
 
 		this.actionButton(actions, "alarm-clock", "Snooze", () => {
 			// Only advance if they actually chose — Escape should leave them in place.
