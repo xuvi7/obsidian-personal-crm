@@ -6,6 +6,16 @@ All notable changes to Personal CRM. Versions follow
 ## Unreleased
 
 ### Changed
+- **The note preview is a bounded, scrollable box again.** It was growing to the
+  full height of the note, which pushed the action buttons out of reach and left
+  only the top of the file visible with no way to scroll to the rest. The height
+  cap now lives on a dedicated scroll container rather than on the element that
+  carries Obsidian's `markdown-rendered` class, which was overriding it.
+- **The preview skips what isn't worth reading.** Unfilled template syntax
+  (`<% … %>`, `{{ … }}`), bullets that are only a label with no value
+  (`- First met:`), and headings left empty once those are gone are all omitted.
+  A note straight from a template now says "Nothing written about them yet."
+  instead of showing a screenful of placeholder.
 
 - **The note field when logging contact is now a full-width, resizable text box**
   rather than a single-line input, so there's room to write something worth
