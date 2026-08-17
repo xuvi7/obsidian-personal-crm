@@ -272,9 +272,7 @@ export class ConfirmModal extends Modal {
 			.addButton((b) =>
 				b
 					.setButtonText(this.confirmLabel)
-					// setDestructive() is the modern call but needs Obsidian 1.13; this
-					// plugin supports 1.7.2, where setWarning() is what exists.
-					.setWarning()
+					.setDestructive()
 					.onClick(() => {
 						this.close();
 						this.onConfirm();
