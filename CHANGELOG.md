@@ -3,7 +3,7 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 1.5.0 — 2026-08-17
 
 ### Added
 
@@ -13,6 +13,18 @@ All notable changes to Personal CRM. Versions follow
 - The dialog asks for the tier alongside the name. A person with no tier isn't
   tracked at all, so creating one without asking would quietly produce someone the
   plugin ignores.
+
+### Performance
+
+- Exclusion fragments are tokenized once per index build instead of once per
+  candidate file, so the cost no longer scales with files × fragments. Measured on
+  5,000 people: 20 fragments went from 20.8ms to 13.7ms, and the cost is now flat in
+  fragment count rather than linear.
+- A file already inside a people folder no longer has its tags and type marker
+  evaluated, since neither can change the outcome. Tag-based identification across
+  13,000 files: 5.2ms to 4.4ms.
+- The unrendered-placeholder check does a cheap substring test before its regex,
+  which almost never matches.
 
 ## 1.4.0 — 2026-08-17
 
