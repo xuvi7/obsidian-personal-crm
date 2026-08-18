@@ -156,15 +156,19 @@ export class PrmDashboardView extends ItemView {
 	private selected(): string[] {
 		// In the order shown, so a bulk action reads the way the list reads.
 		const chosen = this.rowOrder.filter((p) => this.selection.has(p));
-		for (const p of this.selection) if (!chosen.includes(p)) chosen.push(p);
+		// Anything selected but no longer listed goes on the end. Membership is
+		// checked against a Set: `chosen.includes` here was quadratic in the
+		// selection, which a select-all over a large vault feels.
+		const listed = new Set(chosen);
+		for (const p of this.selection) if (!listed.has(p)) chosen.push(p);
 		return chosen;
 	}
 
 	private clearSelection(): void {
 		this.selection.clear();
 		this.lastClicked = null;
-		this.renderList();
 		this.renderBulkBar();
+		this.syncRowSelectedClass();
 	}
 
 	// ------------------------------------------------------------------ rendering
@@ -337,8 +341,8 @@ export class PrmDashboardView extends ItemView {
 		all.onclick = () => {
 			for (const path of this.visiblePaths()) this.selection.add(path);
 			this.lastClicked = null;
-			this.renderList();
 			this.renderBulkBar();
+			this.syncRowSelectedClass();
 		};
 
 		const search = controls.createEl("input", {
@@ -668,8 +672,10 @@ export class PrmDashboardView extends ItemView {
 					else this.selection.delete(this.rowOrder[i]);
 				}
 				this.lastClicked = path;
-				this.renderList();
+				// Only selection changed, so sync in place: rebuilding the list
+				// costs a full render of every row for a checkbox's worth of state.
 				this.renderBulkBar();
+				this.syncRowSelectedClass();
 				return;
 			}
 		}
