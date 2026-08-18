@@ -15,12 +15,13 @@ import { normalizeName } from "./contacts";
 
 export const PRM_VIEW_TYPE = "prm-dashboard";
 
-type FilterKey = "due" | "all" | "unclassified" | "birthdays" | "paused";
+type FilterKey = "due" | "all" | "loops" | "unclassified" | "birthdays" | "paused";
 type SortKey = "urgency" | "name" | "last-contact" | "cadence" | "tags";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
 	{ key: "due", label: "Due" },
 	{ key: "all", label: "Tracked" },
+	{ key: "loops", label: "Follow-ups" },
 	{ key: "unclassified", label: "Unclassified" },
 	{ key: "birthdays", label: "Birthdays" },
 	{ key: "paused", label: "Paused" },
@@ -452,6 +453,13 @@ export class PrmDashboardView extends ItemView {
 					} still unclassified. Run Triage to work through them.`,
 				});
 				break;
+			case "loops":
+				empty.createEl("p", { text: "No open follow-ups." });
+				empty.createEl("p", {
+					cls: "prm-muted",
+					text: "Click a person and use “Add follow-up”, or write an unchecked task that links to them anywhere in the vault.",
+				});
+				break;
 			case "unclassified":
 				empty.createEl("p", { text: "Everyone has been classified." });
 				this.addPersonButton(empty.createDiv({ cls: "prm-empty-actions" }));
@@ -560,6 +568,16 @@ export class PrmDashboardView extends ItemView {
 			nameRow.createSpan({
 				cls: "prm-chip prm-chip-muted",
 				text: `snoozed to ${record.snoozeUntil}`,
+			});
+		}
+
+		if (record.openLoops.length > 0) {
+			nameRow.createSpan({
+				cls: "prm-chip prm-chip-loop",
+				text:
+					record.openLoops.length === 1
+						? "1 follow-up"
+						: `${record.openLoops.length} follow-ups`,
 			});
 		}
 
@@ -734,6 +752,8 @@ export class PrmDashboardView extends ItemView {
 					return r.status === "overdue" || r.status === "due-soon";
 				case "all":
 					return r.status !== "untracked" && r.status !== "paused";
+				case "loops":
+					return r.openLoops.length > 0;
 				case "unclassified":
 					return r.status === "untracked";
 				case "birthdays":

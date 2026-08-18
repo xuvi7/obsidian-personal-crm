@@ -22,7 +22,8 @@ import { FileSnapshot, UndoEntry, UndoManager } from "./undo";
 import { WriteQueue } from "./writes";
 import { detectJournalSources, detectPeopleFolder } from "./detect";
 import { formatDuration, isISODate, todayISO } from "./dates";
-import type { PersonRecord } from "./types";
+import type { LoopRef, PersonRecord } from "./types";
+import { appendFollowUp, completeTask } from "./loops";
 import {
 	asDisplay,
 	contactFields,
@@ -736,6 +737,70 @@ export default class PrmPlugin extends Plugin {
 	}
 
 	// --------------------------------------------------------------------- writes
+
+	/**
+	 * Tick an open loop's task off in whichever note holds it.
+	 *
+	 * The ref carries an offset and a line, both of which an edit can invalidate.
+	 * If neither still points at an open task the write is declined rather than
+	 * ticking off whatever moved into its place.
+	 */
+	async completeLoop(ref: LoopRef): Promise<boolean> {
+		const file = this.app.vault.getAbstractFileByPath(ref.path);
+		if (!(file instanceof TFile)) {
+			new Notice(`${ref.path} is gone.`);
+			return false;
+		}
+
+		let done = false;
+		const entry = await this.tracked(file, `Complete follow-up in ${file.basename}`, async () => {
+			try {
+				await this.app.vault.process(file, (content) => {
+					const next = completeTask(content, ref);
+					if (next === null) return content;
+					done = true;
+					return next;
+				});
+			} catch (error) {
+				this.reportWriteError(file, error);
+			}
+		});
+
+		if (!done) {
+			new Notice("That follow-up has already changed — reindexing.");
+			this.reindex();
+			return false;
+		}
+		this.afterWrite("Follow-up completed.", entry);
+		return true;
+	}
+
+	/** Add a follow-up to a person's note, under the configured heading. */
+	async addFollowUp(record: PersonRecord, text: string): Promise<boolean> {
+		const clean = text.trim();
+		if (clean.length === 0) {
+			new Notice("Write the follow-up first.");
+			return false;
+		}
+		const file = this.app.vault.getAbstractFileByPath(record.path);
+		if (!(file instanceof TFile)) {
+			new Notice(`${record.path} is gone.`);
+			return false;
+		}
+
+		const heading = this.settings.followUpHeading.trim() || "Follow-ups";
+		const entry = await this.tracked(file, `Add follow-up for ${record.name}`, async () => {
+			try {
+				await this.app.vault.process(file, (content) =>
+					appendFollowUp(content, heading, clean),
+				);
+			} catch (error) {
+				this.reportWriteError(file, error);
+			}
+		});
+		this.afterWrite(`Follow-up added for ${record.name}.`, entry);
+		return true;
+	}
 
 	async logContact(file: TFile, date = todayISO(), note?: string): Promise<void> {
 		if (!isISODate(date)) {

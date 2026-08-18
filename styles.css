@@ -377,6 +377,13 @@
 	font-size: var(--font-ui-small);
 }
 
+/* The reach-out and triage sessions flip between people, so their preview keeps a
+   fixed height — a box that resized per person would move the buttons under the
+   cursor. The person panel is opened one person at a time, so it fits instead. */
+.prm-preview-fit {
+	height: auto;
+}
+
 .prm-preview-body {
 	/* Content sizes itself; the parent does the clipping. */
 	max-height: none;
@@ -405,6 +412,70 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 0.35rem;
+}
+
+/* ------------------------------------------------------------------ follow-ups */
+
+.prm-chip-loop {
+	--prm-chip-color: var(--text-accent);
+}
+
+.prm-loops {
+	margin-top: 0.8rem;
+}
+
+.prm-loops-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+}
+
+.prm-loops-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	margin: 0.3rem 0 0.5rem;
+}
+
+.prm-loop {
+	display: flex;
+	align-items: baseline;
+	gap: 0.45rem;
+	padding: 0.15rem 0;
+}
+
+.prm-loop-check {
+	flex: 0 0 auto;
+	margin: 0;
+	cursor: pointer;
+}
+
+.prm-loop-text {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+/* Struck through rather than removed: the row is the feedback that it worked. */
+.prm-loop-done .prm-loop-text {
+	text-decoration: line-through;
+	color: var(--text-faint);
+}
+
+.prm-loop-source {
+	flex: 0 0 auto;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+
+.prm-loop-add {
+	display: flex;
+	gap: 0.4rem;
+}
+
+.prm-loop-input {
+	flex: 1 1 auto;
+	min-width: 0;
 }
 
 /* A Setting row inside a modal defaults to generous vertical padding, which

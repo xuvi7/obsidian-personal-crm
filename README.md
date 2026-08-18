@@ -167,6 +167,35 @@ With a selection, a bar appears above the list: **Log contact** (one date and
 note applied to everyone), **Set cadence**, **Add tag**, **Remove tag** and
 **Snooze**. Each is a single undo step, not one per person.
 
+### Follow-ups
+
+The other half of losing touch is forgetting what you said you'd do. An
+**unchecked task** counts as an open follow-up when it either lives in a person's
+own note or links to them from anywhere in the vault:
+
+```markdown
+- [ ] send the climbing gym list        ← in Sam's note
+- [ ] introduce [[Ana]] to the setter   ← in a project note
+```
+
+They show as a chip on the row, get their own **Follow-ups** tab, and are listed
+in the person panel where you can tick them off — which writes `- [x]` back to
+whichever note holds the task. Due dates are read if the task carries one, in the
+Tasks plugin's `📅 2026-08-20` form, as `due:: 2026-08-20`, or in parentheses.
+
+If you don't already write tasks that way, the person panel's **Add follow-up**
+box writes one for you, under a heading you can set.
+
+Only the *location* of a task is indexed, never its text: the index reads nothing
+but Obsidian's metadata cache, and pulling task text in would mean reading every
+file in the vault on every rebuild. The words are read when they're shown, from
+the few notes that actually hold follow-ups. On a 2,372-file vault the whole
+feature costs 0.2 ms per rebuild, and it can be turned off.
+
+Note that an unchecked `- [ ] reach out to [[Sam]]` is deliberately *not* contact —
+it's an intention, so it becomes a follow-up instead of silencing the reminder
+that prompted it.
+
 ### Tags
 
 Tags are ordinary Obsidian tags — the plugin reads and writes the note's own

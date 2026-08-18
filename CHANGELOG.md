@@ -7,6 +7,17 @@ All notable changes to Personal CRM. Versions follow
 
 ### Added
 
+- **Follow-ups.** An unchecked task counts as an open follow-up for a person when
+  it lives in their own note or links to them from anywhere in the vault. They show
+  as a chip on the row, get a **Follow-ups** tab, and are listed in the person
+  panel where ticking one writes `- [x]` back to whichever note holds it. Due dates
+  are read from `📅 2026-08-20`, `due:: 2026-08-20` or `(2026-08-20)`.
+- **Add follow-up** in the person panel, writing `- [ ] …` under a configurable
+  heading in the person's note — so the feature works without having to adopt a
+  task syntax first.
+- Completing a follow-up whose task has since moved or changed is declined and
+  triggers a reindex, rather than ticking off whatever took its place.
+
 - **Multi-select.** Cmd/Ctrl-click a row or tick its checkbox to select it;
   shift-click extends a range through the rows currently on screen. **Select all**
   takes whatever the filter is showing, so you can narrow first and select second.
@@ -39,6 +50,11 @@ All notable changes to Personal CRM. Versions follow
 
 ### Performance
 
+- Follow-up tracking reads only the metadata cache, so a rebuild costs 0.2 ms more
+  on a 2,372-file vault (2.66 ms → 2.86 ms) and nothing measurable on notes that
+  have bullets but no tasks. Links are matched to tasks by walking both in document
+  order instead of searching the task list per link, and the person link map is now
+  built once for both the contact and follow-up passes instead of twice.
 - Selecting, deselecting and clearing no longer rebuild the list. Only selection
   state changes, so rows are synced in place — a select-all over 3,000 people went
   from a full render of every row to 2.3 ms of work.

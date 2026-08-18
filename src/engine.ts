@@ -135,6 +135,10 @@ export class PrmEngine {
 
 		const files = this.app.vault.getMarkdownFiles();
 		const journalCandidates: TFile[] = [];
+		// Files holding open tasks, gathered here because this pass already has each
+		// file's cache in hand; resolving them to people needs the finished index.
+		const taskFiles: TaskFile[] = [];
+		const trackLoops = this.settings.trackOpenLoops;
 
 		// One pass, classifying each file once.
 		for (const file of files) {
@@ -150,6 +154,11 @@ export class PrmEngine {
 			} else if (personVerdict === "skipped") {
 				skipped++;
 			}
+
+			if (trackLoops && cache?.listItems && cache.listItems.length > 0) {
+				const tasks = openTasks(cache);
+				if (tasks.length > 0) taskFiles.push({ file, cache, tasks });
+			}
 		}
 
 		diag.personFilesFound = people.size;
@@ -158,7 +167,10 @@ export class PrmEngine {
 
 		this.notesByDate = new Map();
 		const countMentions = this.settings.journalMentionsCountAsContact;
-		const linkMap = countMentions ? buildPersonLinkMap(people) : null;
+		// One map for both passes: contact attribution and follow-ups resolve links
+		// the same way, and building it twice is pure duplication.
+		const needsLinks = countMentions || (trackLoops && taskFiles.length > 0);
+		const linkMap = needsLinks && people.size > 0 ? buildPersonLinkMap(people) : null;
 
 		for (const file of journalCandidates) {
 			const cache = this.app.metadataCache.getFileCache(file);
@@ -172,6 +184,10 @@ export class PrmEngine {
 
 			if (!countMentions || people.size === 0 || !cache || !linkMap) continue;
 			diag.interactionsFound += this.attributeLinks(file, cache, date, people, linkMap);
+		}
+
+		if (trackLoops && taskFiles.length > 0 && linkMap) {
+			diag.openLoopsFound = this.attachOpenLoops(taskFiles, people, linkMap);
 		}
 
 		for (const record of people.values()) this.finalize(record, today);
@@ -389,6 +405,70 @@ export class PrmEngine {
 		return added;
 	}
 
+	/**
+	 * Attach open tasks to the people they concern.
+	 *
+	 * Two sources, because both are how people actually write a commitment down:
+	 * a task in someone's own note is about them without needing to name them, and
+	 * a task anywhere else is about whoever it links to.
+	 */
+	private attachOpenLoops(
+		taskFiles: TaskFile[],
+		people: Map<string, PersonRecord>,
+		linkMap: PersonLinkMap,
+	): number {
+		let found = 0;
+
+		// Cheap membership check so the same task can't be attached twice — once for
+		// living in a person's note and again for linking to them.
+		const seen = new Set<string>();
+		const add = (record: PersonRecord, path: string, line: number, offset: number, own: boolean) => {
+			const key = `${record.path}\u0000${path}\u0000${offset}`;
+			if (seen.has(key)) return;
+			seen.add(key);
+			record.openLoops.push({ path, line, offset, own });
+			found++;
+		};
+
+		for (const { file, cache, tasks } of taskFiles) {
+			const owner = people.get(file.path);
+			if (owner) {
+				for (const task of tasks) {
+					add(owner, file.path, task.line, task.start, true);
+				}
+			}
+
+			const links = cache.links;
+			if (!links || links.length === 0) continue;
+
+			// Both lists are in document order, so walk them together rather than
+			// searching the task list once per link.
+			let ti = 0;
+			for (const link of links) {
+				const offset = link.position?.start?.offset;
+				if (typeof offset !== "number") continue;
+				while (ti < tasks.length && tasks[ti].end < offset) ti++;
+				if (ti >= tasks.length) break;
+				const task = tasks[ti];
+				if (offset < task.start) continue;
+
+				const linkpath = getLinkpath(link.link);
+				const key = normalizeLinkKey(linkpath);
+				let targetPath = linkMap.byName.get(key);
+				if (linkMap.ambiguous.has(key)) {
+					targetPath = this.app.metadataCache.getFirstLinkpathDest(linkpath, file.path)?.path;
+				}
+				if (!targetPath) continue;
+
+				const record = people.get(targetPath);
+				if (!record) continue;
+				add(record, file.path, task.line, task.start, targetPath === file.path);
+			}
+		}
+
+		return found;
+	}
+
 	private baseRecord(file: TFile, cache: CachedMetadata | null): PersonRecord {
 		const fm = frontmatterOf(cache);
 		const K = FRONTMATTER_KEYS;
@@ -443,6 +523,7 @@ export class PrmEngine {
 			status: "untracked",
 			baselineSource,
 			daysUntilBirthday: null,
+			openLoops: [],
 		};
 
 		const logged = coerceISODate(fm[K.lastContacted]);
@@ -599,6 +680,39 @@ function buildPersonLinkMap(people: Map<string, PersonRecord>): PersonLinkMap {
  * Byte ranges whose links record intent rather than contact: unchecked to-dos,
  * quotes, code blocks, and every embed.
  */
+/** An unchecked task's span and line, for attributing and later completing it. */
+interface OpenTask {
+	start: number;
+	end: number;
+	line: number;
+}
+
+interface TaskFile {
+	file: TFile;
+	cache: CachedMetadata;
+	tasks: OpenTask[];
+}
+
+/**
+ * Unchecked tasks in a note.
+ *
+ * The same `task === " "` test excludedRanges uses to *ignore* these when
+ * counting contact: an open task records an intention, which is exactly what
+ * makes it an open loop.
+ */
+function openTasks(cache: CachedMetadata): OpenTask[] {
+	const out: OpenTask[] = [];
+	for (const item of cache.listItems ?? []) {
+		if (item.task !== " ") continue;
+		out.push({
+			start: item.position.start.offset,
+			end: item.position.end.offset,
+			line: item.position.start.line,
+		});
+	}
+	return out;
+}
+
 function excludedRanges(cache: CachedMetadata): Range[] {
 	const ranges: Range[] = [];
 
@@ -672,6 +786,7 @@ function emptyDiagnostics(): PrmDiagnostics {
 		journalFilesScanned: 0,
 		journalFilesDated: 0,
 		interactionsFound: 0,
+		openLoopsFound: 0,
 		missingFolders: [],
 		buildMs: 0,
 	};

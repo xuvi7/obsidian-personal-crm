@@ -15,6 +15,7 @@ import type PrmPlugin from "./main";
 import { tierById } from "./settings";
 import type { PersonRecord, Tier } from "./types";
 import { addDays, formatDuration, isISODate, relativeToToday, todayISO } from "./dates";
+import { loopFile, readLoops } from "./loops";
 
 /**
  * Reduce a person note to the part worth reading in a preview.
@@ -844,11 +845,13 @@ export class PersonActionsModal extends Modal {
 		}
 		if (record.relationship) meta.createSpan({ text: record.relationship });
 
-		const previewEl = contentEl.createDiv({ cls: "prm-preview" });
+		const previewEl = contentEl.createDiv({ cls: "prm-preview prm-preview-fit" });
 		const file = this.app.vault.getAbstractFileByPath(record.path);
 		if (file instanceof TFile && this.preview) {
 			void renderNotePreview(this.app, previewEl, file, this.preview);
 		}
+
+		this.renderLoops(contentEl.createDiv({ cls: "prm-loops" }), record);
 
 		const dateSetting = new Setting(contentEl).setName("Date").addText((t) => {
 			t.setValue(this.date).onChange((v) => {
@@ -900,6 +903,97 @@ export class PersonActionsModal extends Modal {
 		});
 
 		this.validate();
+	}
+
+	/**
+	 * Open follow-ups, with an input to add one.
+	 *
+	 * The task text isn't in the index — only its location is — so it's read here,
+	 * from the handful of files that actually hold this person's loops.
+	 */
+	private renderLoops(host: HTMLElement, record: PersonRecord): void {
+		host.empty();
+		const heading = host.createDiv({ cls: "prm-loops-head" });
+		heading.createSpan({ cls: "prm-note-label", text: "Follow-ups" });
+
+		const list = host.createDiv({ cls: "prm-loops-list" });
+		if (record.openLoops.length === 0) {
+			list.createDiv({ cls: "prm-muted", text: "Nothing outstanding." });
+		} else {
+			list.createDiv({ cls: "prm-muted", text: "Loading…" });
+			void this.fillLoops(list, record);
+		}
+
+		const add = host.createDiv({ cls: "prm-loop-add" });
+		const input = add.createEl("input", {
+			cls: "prm-loop-input",
+			attr: { type: "text", placeholder: "Add a follow-up…" },
+		});
+		const submit = async () => {
+			const text = input.value.trim();
+			if (text.length === 0) return;
+			input.value = "";
+			if (await this.plugin.addFollowUp(record, text)) this.render();
+		};
+		input.addEventListener("keydown", (evt) => {
+			if (evt.key === "Enter") {
+				evt.preventDefault();
+				void submit();
+			}
+		});
+		const btn = add.createEl("button", { cls: "prm-loop-add-btn", text: "Add" });
+		btn.onclick = () => void submit();
+	}
+
+	private async fillLoops(list: HTMLElement, record: PersonRecord): Promise<void> {
+		const loops = await readLoops(this.app, record.openLoops);
+		// The panel may have been closed or re-rendered while reading.
+		if (!list.isConnected) return;
+		list.empty();
+
+		if (loops.length === 0) {
+			list.createDiv({ cls: "prm-muted", text: "Nothing outstanding." });
+			return;
+		}
+
+		const today = todayISO();
+		for (const loop of loops) {
+			const row = list.createDiv({ cls: "prm-loop" });
+			const box = row.createEl("input", {
+				cls: "prm-loop-check",
+				attr: { type: "checkbox", "aria-label": `Complete: ${loop.text}` },
+			});
+			box.onclick = () => {
+				box.disabled = true;
+				void this.plugin.completeLoop(loop.ref).then((ok) => {
+					if (ok) row.addClass("prm-loop-done");
+					else box.disabled = false;
+				});
+			};
+
+			row.createSpan({ cls: "prm-loop-text", text: loop.text });
+
+			if (loop.due) {
+				row.createSpan({
+					cls: loop.due < today ? "prm-chip prm-chip-overdue" : "prm-chip prm-chip-soon",
+					text: loop.due < today ? `overdue ${loop.due}` : `due ${loop.due}`,
+				});
+			}
+
+			// Where it was written down, unless that's the note already on screen.
+			if (!loop.ref.own) {
+				const src = row.createEl("a", {
+					cls: "prm-loop-source",
+					text: loop.ref.path.split("/").pop()?.replace(/\.md$/, "") ?? loop.ref.path,
+				});
+				src.onclick = (evt) => {
+					evt.preventDefault();
+					const file = loopFile(this.app, loop.ref);
+					if (file) void this.app.workspace.getLeaf(false).openFile(file);
+					this.close();
+				};
+			}
+		}
 	}
 
 	private actionButton(

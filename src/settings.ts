@@ -33,6 +33,14 @@ export interface PrmSettings {
 	 */
 	markerTags: string[];
 
+	/**
+	 * Track unchecked tasks that concern a person as open loops. Reads only the
+	 * metadata cache, so leaving it on costs a scan of list items, not file reads.
+	 */
+	trackOpenLoops: boolean;
+	/** Heading new follow-ups are appended under in a person's note. */
+	followUpHeading: string;
+
 	/** Folder new person notes are created in. Empty = the first people folder. */
 	newPersonFolder: string;
 	/** Note used as the template for new people. Empty = a plain built-in note. */
@@ -85,6 +93,9 @@ export const DEFAULT_SETTINGS: PrmSettings = {
 	requireTagOrType: false,
 	personExclusions: ["template", "templates", "untitled", "index", "MOC"],
 	markerTags: ["people", "person", "contact", "contacts"],
+
+	trackOpenLoops: true,
+	followUpHeading: "Follow-ups",
 
 	newPersonFolder: "",
 	newPersonTemplate: "",
@@ -625,6 +636,24 @@ export class PrmSettingTab extends PluginSettingTab {
 					max: 30,
 					step: 1,
 					displayFormat: (v: number) => (v === 0 ? "off" : `${v} days`),
+				},
+			},
+			{
+				name: "Track follow-ups",
+				desc: "Counts unchecked tasks that concern someone — in their own note, or anywhere that links to them — as open follow-ups. Reads the metadata cache only, never file contents.",
+				aliases: ["loops", "tasks", "todo", "commitments"],
+				control: { type: "toggle", key: "trackOpenLoops" },
+			},
+			{
+				name: "Follow-up heading",
+				desc: "Heading new follow-ups are added under in a person's note.",
+				visible: () => this.plugin.settings.trackOpenLoops,
+				control: {
+					type: "text",
+					key: "followUpHeading",
+					placeholder: "Follow-ups",
+					validate: (value: string) =>
+						value.trim().length === 0 ? "Enter a heading." : undefined,
 				},
 			},
 			{
