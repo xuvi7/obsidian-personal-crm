@@ -312,16 +312,22 @@ export function trailingMonths(
 }
 
 /**
- * Shade level 0-4 for a count.
+ * Shade level 0-4 for a count. Higher means darker.
  *
- * Square-rooted rather than linear. Counts are heavily skewed — one busy day can
- * be ten times a typical one — and a linear scale against the maximum drops almost
- * every real period onto level 1, which is the level closest to "empty". This gives
- * the low counts, where nearly all the data lives, most of the range.
+ * Two regimes, because a relative scale alone gets both ends wrong.
+ *
+ * When the busiest period holds only a handful, counts map straight to levels: one
+ * interaction is the lightest step. Stretching a 0-or-1 range across the full ramp
+ * — which is every single-person calendar — painted a solitary contact as the
+ * darkest shade, reading as maximum intensity when it's the minimum.
+ *
+ * Above that, levels are square-rooted rather than linear. Counts are heavily
+ * skewed, one busy day being ten times a typical one, and a linear scale against
+ * the maximum drops almost every real period onto level 1.
  */
 export function shade(count: number, max: number): number {
 	if (count <= 0) return 0;
-	if (max <= 1) return 4;
+	if (max <= 4) return Math.min(4, count);
 	const level = Math.ceil(Math.sqrt(count / max) * 4);
 	return Math.min(4, Math.max(1, level));
 }

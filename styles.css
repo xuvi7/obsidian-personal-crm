@@ -607,9 +607,7 @@ a.prm-place:hover {
 	border: none;
 	border-radius: 2px;
 	cursor: pointer;
-	/* The base every level's accent layer sits on. */
 	background-color: var(--background-modifier-border);
-	background-image: none;
 	box-shadow: none;
 }
 
@@ -624,43 +622,68 @@ a.prm-place:hover {
 /*
  * Four steps rather than a gradient: a count you can read off the shade.
  *
- * Each step is the theme's accent at a fixed alpha, composited over the empty
- * cell's own colour — an accent layer on a grey base, in two background layers on
- * one element. Three earlier attempts each failed a different way:
+ * Darker means more. The steps come from the theme's own accent — its hue and
+ * saturation, with lightness scaled around the accent's own — so the ramp follows
+ * whatever accent colour is set rather than a palette baked in here.
  *
- *   - color-mix() blends: invisible where the renderer lacks color-mix, and the
- *     low steps collapse into the border colour when the accent sits near it.
- *     The low steps are where nearly all the data is: on a real vault, 201 of 362
- *     filled days land on level 1.
- *   - scaling --accent-l: went *darker* than the empty cell on a dark theme,
- *     inverting "more contact = brighter" (measured 1.09 contrast against empty).
- *   - opacity on the cell: dims the hover outline and the selection ring with it.
+ * Scaled *around* --accent-l rather than down from a fixed ceiling, which is what
+ * keeps it working in both directions of theme. On a dark theme "darker" trends
+ * toward the background, so the darkest step stops well short of it; on a light
+ * theme the same ramp reads as ordinary increasing depth. Every step stays a
+ * saturated accent colour, so none of them can be confused with an empty cell.
  *
- * Compositing always moves away from the empty colour toward the accent, so it
- * reads correctly in light and dark themes alike, and hsl() with slash-alpha needs
- * no modern colour functions. The literals are Obsidian's default accent, for a
- * theme that doesn't publish its accent components.
+ * Each level declares a literal first, for a theme that doesn't publish its accent
+ * components; the literals are Obsidian's default accent at the same lightnesses.
+ *
+ * Earlier attempts, each of which failed differently:
+ *   - color-mix() blends into the border colour: invisible without color-mix
+ *     support, and the low steps collapsed into looking empty. The low steps are
+ *     nearly all the data — 201 of 362 filled days on a real vault.
+ *   - accent-at-alpha over the empty colour: worked, but ran light-to-dark the
+ *     wrong way round for reading "more" as "darker".
+ *   - opacity on the cell: dims the hover outline and selection ring with it.
  */
-.prm-calview,
-.prm-cal-legend {
-	--prm-accent: var(--accent-h, 254) var(--accent-s, 80%) var(--accent-l, 68%);
+/*
+ * Empty is a hollow slot, not a dark fill.
+ *
+ * With "darker means more", the busiest cells necessarily approach the background
+ * on a dark theme — measured at 1.14 contrast against a filled empty cell, close
+ * enough to be mistaken for one. Drawing empty as an outline instead means any
+ * solid fill is unambiguously contact, however dark it gets, and the ramp keeps its
+ * full range.
+ */
+.prm-cal-l0 {
+	background-color: transparent;
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
 }
 
-.prm-cal-l0 { background-color: var(--background-modifier-border); }
-
 .prm-cal-l1 {
-	background-image: linear-gradient(hsl(var(--prm-accent) / 0.4), hsl(var(--prm-accent) / 0.4));
+	background-color: #c9baf7;
+	background-color: hsl(
+		var(--accent-h, 254) var(--accent-s, 80%) min(92%, calc(var(--accent-l, 68%) * 1.25))
+	);
 }
 
 .prm-cal-l2 {
-	background-image: linear-gradient(hsl(var(--prm-accent) / 0.62), hsl(var(--prm-accent) / 0.62));
+	background-color: #977cf0;
+	background-color: hsl(
+		var(--accent-h, 254) var(--accent-s, 80%) min(84%, calc(var(--accent-l, 68%) * 1.05))
+	);
 }
 
 .prm-cal-l3 {
-	background-image: linear-gradient(hsl(var(--prm-accent) / 0.82), hsl(var(--prm-accent) / 0.82));
+	background-color: #653dea;
+	background-color: hsl(
+		var(--accent-h, 254) var(--accent-s, 80%) max(28%, calc(var(--accent-l, 68%) * 0.85))
+	);
 }
 
-.prm-cal-l4 { background-color: var(--interactive-accent); }
+.prm-cal-l4 {
+	background-color: #3d15c2;
+	background-color: hsl(
+		var(--accent-h, 254) var(--accent-s, 80%) max(22%, calc(var(--accent-l, 68%) * 0.62))
+	);
+}
 
 /* After the levels on purpose: a future or missing period must not be shaded like
    a period that simply had no contact. */
@@ -668,7 +691,8 @@ a.prm-place:hover {
 .prm-cal-future,
 .prm-cal-future.prm-cal-l0 {
 	background-color: transparent;
-	background-image: none;
+	/* Not even the empty slot's outline: a future period isn't a period yet. */
+	box-shadow: none;
 	cursor: default;
 }
 
@@ -791,12 +815,16 @@ a.prm-place:hover {
 	min-width: 0;
 }
 
-/* A Setting row inside a modal defaults to generous vertical padding, which
-   pushes the notes box and actions out of view in a short person panel. */
-.prm-inline-setting {
-	padding-top: 0.5rem;
-	padding-bottom: 0;
-	border-top: none;
+/* The date sits in the same column as the notes box rather than in a Setting's
+   right-hand control column, so the form reads as one thing. Bounded width: a
+   date picker doesn't get wider usefully. */
+.prm-date-field {
+	margin-bottom: 0;
+}
+
+.prm-date-input {
+	width: 100%;
+	max-width: 11rem;
 }
 
 .prm-reachout-nav {
@@ -1080,8 +1108,11 @@ a.prm-place:hover {
 	color: var(--text-muted);
 }
 
+/* A reserved line, so a validation message appearing doesn't shift the form under
+   the cursor. Tight enough that an empty one doesn't read as a gap. */
 .prm-form-error {
-	min-height: 1.2em;
+	min-height: 1em;
+	line-height: 1;
 	color: var(--text-error);
 	font-size: var(--font-ui-smaller);
 }
@@ -1180,7 +1211,7 @@ a.prm-place:hover {
 	display: flex;
 	flex-direction: column;
 	gap: 0.2rem;
-	margin-top: 0.9rem;
+	margin-top: 0.6rem;
 }
 
 .prm-note-label {
@@ -1198,6 +1229,9 @@ a.prm-place:hover {
    you'd want to read back later. */
 .prm-note-input {
 	width: 100%;
+	/* Padding was being added to a 100% width, so the box overhung its field by
+	   19px and sat wider than everything above it. */
+	box-sizing: border-box;
 	min-height: 6rem;
 	max-height: 40vh;
 	resize: vertical;

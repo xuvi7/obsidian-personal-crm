@@ -186,6 +186,31 @@ function noteEditor(parent: HTMLElement, opts: NoteEditorOptions): HTMLTextAreaE
 	return input;
 }
 
+/**
+ * A labelled date input.
+ *
+ * Not a `Setting` row. Setting carries its own vertical padding and pushes its
+ * control into a narrow right-hand column, which left a gap between the date and
+ * the notes box and made the date field conspicuously smaller than everything
+ * around it. This matches noteEditor's markup so the two read as one form.
+ */
+function dateEditor(
+	parent: HTMLElement,
+	opts: { label: string; value: string; onChange: (value: string) => void },
+): HTMLInputElement {
+	const field = parent.createDiv({ cls: "prm-note-field prm-date-field" });
+	field.createEl("label", { cls: "prm-note-label", text: opts.label });
+	const input = field.createEl("input", {
+		cls: "prm-date-input",
+		attr: { type: "date" },
+	});
+	input.value = opts.value;
+	input.addEventListener("input", () => opts.onChange(input.value.trim()));
+	// A date picker commits on change, not on every keystroke of typing.
+	input.addEventListener("change", () => opts.onChange(input.value.trim()));
+	return input;
+}
+
 // ---------------------------------------------------------------- person picker
 
 export class PersonPickerModal extends FuzzySuggestModal<PersonRecord> {
@@ -778,13 +803,13 @@ export class LogContactModal extends Modal {
 			contentEl.createEl("p", { cls: "prm-muted", text: lastContactLabel(this.record) });
 		}
 
-		new Setting(contentEl).setName("Date").addText((t) => {
-			t.setValue(this.date).onChange((v) => {
-				this.date = v.trim();
+		dateEditor(contentEl, {
+			label: "Date",
+			value: this.date,
+			onChange: (v) => {
+				this.date = v;
 				this.validate();
-			});
-			t.inputEl.type = "date";
-			return t;
+			},
 		});
 
 		this.error = contentEl.createDiv({ cls: "prm-form-error" });
@@ -954,15 +979,14 @@ export class PersonActionsModal extends Modal {
 
 		this.renderLoops(contentEl.createDiv({ cls: "prm-loops" }), record);
 
-		const dateSetting = new Setting(contentEl).setName("Date").addText((t) => {
-			t.setValue(this.date).onChange((v) => {
-				this.date = v.trim();
+		dateEditor(contentEl, {
+			label: "Date",
+			value: this.date,
+			onChange: (v) => {
+				this.date = v;
 				this.validate();
-			});
-			t.inputEl.type = "date";
-			return t;
+			},
 		});
-		dateSetting.setClass("prm-inline-setting");
 
 		this.errorEl = contentEl.createDiv({ cls: "prm-form-error" });
 

@@ -61,6 +61,24 @@ All notable changes to Personal CRM. Versions follow
   reading. It now redraws when the index settles.
 - **The follow-up checkbox sat below its text.** `align-items: baseline` on a
   checkbox, which has no text baseline of its own.
+- **Calendar shading now runs darker for more**, built from the theme's own accent
+  hue and saturation with lightness scaled around the accent's own, so it follows
+  whatever accent you've set and works in light and dark themes alike. An empty
+  period is a hollow slot rather than a dark fill: with darker-means-more the busiest
+  cells necessarily approach the background on a dark theme (measured at 1.14
+  contrast against a filled empty cell), and an outline removes the ambiguity.
+- Shade levels use two regimes. When the busiest period holds only a handful, counts
+  map straight to levels, so a lone interaction is the *lightest* step — every
+  single-person calendar is a 0-or-1 range, and a relative scale painted its days
+  the darkest shade, reading as maximum intensity when it's the minimum. Above that,
+  levels are square-rooted, since a linear scale against the maximum put day counts
+  1 through 5 all on one level.
+- **The date field in the log and person dialogs** sat in a Setting's narrow
+  right-hand control column, which made it conspicuously smaller than the rest of
+  the form and left an awkward gap before the notes box. Both dialogs now use a
+  labelled date field in the same column and visual language as the notes box.
+- The notes box had `box-sizing: content-box` with `width: 100%`, so its padding
+  pushed it 19px wider than the field it sat in.
 - **The calendar's shades were invisible.** Levels were the accent blended into the
   border colour with `color-mix()`, so the low steps — where nearly all the data is:
   201 of 362 filled days on a real vault — collapsed into looking empty, and vanished

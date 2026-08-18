@@ -219,8 +219,10 @@ header, or the `Open contact calendar` command — with four scales:
 | **Monthly** | years × months | six years |
 | **Yearly** | one row of years | everything on record |
 
-Cells are shaded by how many interactions fall in the period, with a key in the
-header. Click one to see who, and click a name to open their note. Click the same
+Cells are shaded by how many interactions fall in the period — **darker means
+more** — with a key in the header. The steps come from your theme's own accent
+colour, and an empty period is drawn as a hollow slot rather than a dark fill, so a
+busy period can't be mistaken for an empty one on a dark theme. Click one to see who, and click a name to open their note. Click the same
 period again to dismiss the detail. Year rows are contiguous even when a year is
 empty — a calendar that silently skips time isn't a calendar — and anything older
 than the range is reported as a count rather than quietly dropped.
