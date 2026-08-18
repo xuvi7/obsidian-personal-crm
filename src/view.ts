@@ -1,15 +1,22 @@
-import { ItemView, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type PrmPlugin from "./main";
 import { tierById } from "./settings";
 import type { PersonRecord, PersonStatus } from "./types";
 import { formatDuration, relativeToToday, todayISO } from "./dates";
-import { LogContactModal, SnoozeModal, TierPickerModal } from "./modals";
+import {
+	LogContactModal,
+	PersonActionsModal,
+	SnoozeModal,
+	TagPickerModal,
+	TierChooserModal,
+	TierPickerModal,
+} from "./modals";
 import { normalizeName } from "./contacts";
 
 export const PRM_VIEW_TYPE = "prm-dashboard";
 
 type FilterKey = "due" | "all" | "unclassified" | "birthdays" | "paused";
-type SortKey = "urgency" | "name" | "last-contact" | "cadence";
+type SortKey = "urgency" | "name" | "last-contact" | "cadence" | "tags";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
 	{ key: "due", label: "Due" },
@@ -24,6 +31,7 @@ const SORTS: { key: SortKey; label: string }[] = [
 	{ key: "last-contact", label: "Longest since contact" },
 	{ key: "name", label: "Name" },
 	{ key: "cadence", label: "Cadence" },
+	{ key: "tags", label: "Tag" },
 ];
 
 const STATUS_LABEL: Record<PersonStatus, string> = {
@@ -45,8 +53,15 @@ export class PrmDashboardView extends ItemView {
 	private listEl!: HTMLElement;
 	private searchEl: HTMLInputElement | null = null;
 
+	private bulkEl!: HTMLElement;
 	private frame: number | null = null;
 	private dirty = true;
+	/** Paths of selected people. Kept by path so it survives a re-render. */
+	private selection = new Set<string>();
+	/** Anchor for shift-click range selection. */
+	private lastClicked: string | null = null;
+	/** The order rows are currently in, for resolving a shift-click range. */
+	private rowOrder: string[] = [];
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -79,6 +94,7 @@ export class PrmDashboardView extends ItemView {
 		const chrome = root.createDiv({ cls: "prm-chrome" });
 		this.headerEl = chrome.createDiv({ cls: "prm-header" });
 		this.toolbarEl = chrome.createDiv({ cls: "prm-toolbar" });
+		this.bulkEl = chrome.createDiv({ cls: "prm-bulkbar" });
 		this.listEl = root.createDiv({ cls: "prm-list" });
 
 		// One coalesced handler: the engine and the undo stack both fire on a single
@@ -122,9 +138,33 @@ export class PrmDashboardView extends ItemView {
 
 	private renderAll(): void {
 		this.dirty = false;
+		this.pruneSelection();
 		this.renderHeader();
 		this.renderToolbar();
 		this.renderList();
+		this.renderBulkBar();
+	}
+
+	/** Drop selected paths that no longer exist, so counts can't go stale. */
+	private pruneSelection(): void {
+		if (this.selection.size === 0) return;
+		for (const path of [...this.selection]) {
+			if (!this.plugin.engine.get(path)) this.selection.delete(path);
+		}
+	}
+
+	private selected(): string[] {
+		// In the order shown, so a bulk action reads the way the list reads.
+		const chosen = this.rowOrder.filter((p) => this.selection.has(p));
+		for (const p of this.selection) if (!chosen.includes(p)) chosen.push(p);
+		return chosen;
+	}
+
+	private clearSelection(): void {
+		this.selection.clear();
+		this.lastClicked = null;
+		this.renderList();
+		this.renderBulkBar();
 	}
 
 	// ------------------------------------------------------------------ rendering
@@ -199,6 +239,77 @@ export class PrmDashboardView extends ItemView {
 		chip.createSpan({ cls: "prm-stat-label", text: label });
 	}
 
+	/**
+	 * The bulk action bar, shown only when something is selected.
+	 *
+	 * Lives in the fixed chrome rather than the scrolling list so the actions stay
+	 * reachable no matter how far down the selection is.
+	 */
+	private renderBulkBar(): void {
+		const bar = this.bulkEl;
+		bar.empty();
+		const paths = this.selected();
+		bar.toggleClass("prm-bulkbar-active", paths.length > 0);
+		if (paths.length === 0) return;
+
+		bar.createSpan({
+			cls: "prm-bulk-count",
+			text: `${paths.length} selected`,
+		});
+
+		const act = (label: string, icon: string, onClick: () => void) => {
+			const btn = bar.createEl("button", { cls: "prm-bulk-btn" });
+			setIcon(btn.createSpan({ cls: "prm-action-icon" }), icon);
+			btn.createSpan({ text: label });
+			btn.onclick = onClick;
+		};
+
+		act("Log contact", "check", () => {
+			new LogContactModal(this.plugin, null, {
+				count: paths.length,
+				onSubmit: (date, note) => void this.plugin.bulkLogContact(paths, date, note),
+			}).open();
+		});
+		act("Set cadence", "gauge", () => {
+			new TierChooserModal(this.plugin, paths.length, (tierId) => {
+				void this.plugin.bulkSetTier(paths, tierId);
+			}).open();
+		});
+		act("Add tag", "tag", () => {
+			new TagPickerModal(this.plugin, "add", this.plugin.engine.allTags(), (tag) => {
+				void this.plugin.bulkTag(paths, tag, true);
+			}).open();
+		});
+		act("Remove tag", "tags", () => {
+			// Offer only tags the selection actually has, so the list is meaningful.
+			const present = new Set<string>();
+			for (const path of paths) {
+				for (const tag of this.plugin.engine.get(path)?.tags ?? []) present.add(tag);
+			}
+			if (present.size === 0) {
+				new Notice("None of the selected people have a tag.");
+				return;
+			}
+			new TagPickerModal(this.plugin, "remove", [...present].sort(), (tag) => {
+				void this.plugin.bulkTag(paths, tag, false);
+			}).open();
+		});
+		act("Snooze", "alarm-clock", () => {
+			new SnoozeModal(
+				this.plugin,
+				// The picker names one person; for a selection, say how many.
+				{ ...(this.plugin.engine.get(paths[0]) as PersonRecord), name: `${paths.length} people` },
+				(chosen, until) => {
+					if (chosen && until) void this.plugin.bulkSnooze(paths, until);
+				},
+				true,
+			).open();
+		});
+
+		const clear = bar.createEl("button", { cls: "prm-bulk-clear", text: "Clear" });
+		clear.onclick = () => this.clearSelection();
+	}
+
 	private renderToolbar(): void {
 		const toolbar = this.toolbarEl;
 		toolbar.empty();
@@ -218,9 +329,21 @@ export class PrmDashboardView extends ItemView {
 
 		const controls = toolbar.createDiv({ cls: "prm-controls" });
 
+		// Select-all acts on what's visible, which after a filter is the useful set.
+		const all = controls.createEl("button", { cls: "prm-tab", text: "Select all" });
+		all.setAttribute("aria-label", "Select every person currently listed");
+		// Additive, not a toggle: the button's label can't announce a toggle's
+		// direction, and the bulk bar's Clear already undoes it.
+		all.onclick = () => {
+			for (const path of this.visiblePaths()) this.selection.add(path);
+			this.lastClicked = null;
+			this.renderList();
+			this.renderBulkBar();
+		};
+
 		const search = controls.createEl("input", {
 			cls: "prm-search",
-			attr: { type: "search", placeholder: "Filter by name…" },
+			attr: { type: "search", placeholder: "Filter by name or #tag…" },
 		});
 		search.value = this.query;
 		// Filtering hides already-built rows rather than rebuilding them, so typing
@@ -247,6 +370,7 @@ export class PrmDashboardView extends ItemView {
 		list.empty();
 
 		const records = this.selectedRecords();
+		this.rowOrder = records.map((r) => r.path);
 		if (records.length === 0) {
 			this.renderEmptyState(list);
 			return;
@@ -259,11 +383,15 @@ export class PrmDashboardView extends ItemView {
 
 	/** Show/hide built rows to match the search box. */
 	private applyQuery(): void {
+		// A leading '#' means "this tag", not "this text anywhere": clicking the
+		// #gym chip shouldn't also match someone whose relationship reads
+		// "climbing gym". Plain text still searches tags along with everything else.
+		const byTag = this.query.trimStart().startsWith("#");
 		const q = normalizeName(this.query);
 		let visible = 0;
 		for (const child of Array.from(this.listEl.children)) {
 			const el = child as HTMLElement;
-			const haystack = el.dataset.prmSearch;
+			const haystack = byTag ? el.dataset.prmTags : el.dataset.prmSearch;
 			if (haystack === undefined) continue;
 			const show = q.length === 0 || haystack.includes(q);
 			el.toggleClass("prm-hidden", !show);
@@ -361,9 +489,14 @@ export class PrmDashboardView extends ItemView {
 	private renderRow(list: HTMLElement, record: PersonRecord, today: string): void {
 		const tier = tierById(this.plugin.settings, record.tierId);
 		const row = list.createDiv({ cls: `prm-row prm-row-${record.status}` });
+		row.dataset.prmPath = record.path;
+		row.toggleClass("prm-row-selected", this.selection.has(record.path));
 		row.dataset.prmSearch = normalizeName(
-			[record.name, ...record.aliases, record.relationship ?? ""].join(" "),
+			[record.name, ...record.aliases, record.relationship ?? "", ...record.tags].join(" "),
 		);
+		// Tags on their own, for '#'-prefixed queries. normalizeName turns '#'
+		// into a space, so the query and these values meet in the same spelling.
+		row.dataset.prmTags = normalizeName(record.tags.join(" "));
 
 		const bar = row.createDiv({ cls: "prm-bar" });
 		const fill = bar.createDiv({ cls: "prm-bar-fill" });
@@ -373,6 +506,18 @@ export class PrmDashboardView extends ItemView {
 		const main = row.createDiv({ cls: "prm-row-main" });
 
 		const nameRow = main.createDiv({ cls: "prm-name-row" });
+
+		// Inside the name row rather than a leading column of the row: under
+		// ~700px the row stacks into a column, and a direct child there would
+		// stretch to full width. Sidebar leaves are routinely that narrow.
+		const check = nameRow.createEl("input", {
+			cls: "prm-select",
+			attr: { type: "checkbox", "aria-label": `Select ${record.name}` },
+		});
+		check.checked = this.selection.has(record.path);
+		// Bind on click, not change: only a click carries the shift modifier.
+		check.onclick = (evt) => this.onSelectClick(record.path, evt, check);
+
 		const link = nameRow.createEl("a", { cls: "prm-name", text: record.name });
 		link.onclick = (evt) => {
 			evt.preventDefault();
@@ -449,6 +594,19 @@ export class PrmDashboardView extends ItemView {
 		}
 		if (record.relationship) meta.createSpan({ text: record.relationship });
 
+		for (const tag of record.tags) {
+			const chip = meta.createEl("a", { cls: "prm-tag", text: `#${tag}` });
+			chip.setAttribute("aria-label", `Filter by ${tag}`);
+			chip.onclick = (evt) => {
+				evt.preventDefault();
+				// Clicking a tag filters to it; clicking the same one again clears.
+				const next = this.query === `#${tag}` ? "" : `#${tag}`;
+				this.query = next;
+				if (this.searchEl) this.searchEl.value = next;
+				this.applyQuery();
+			};
+		}
+
 		const actions = row.createDiv({ cls: "prm-row-actions" });
 
 		this.iconButton(actions, "check", "Log contact today", async () => {
@@ -465,6 +623,77 @@ export class PrmDashboardView extends ItemView {
 		});
 
 		row.setAttribute("aria-label", `${record.name} — ${STATUS_LABEL[record.status]}`);
+
+		row.onclick = (evt) => {
+			// Links, buttons and the checkbox own their own clicks; the row only
+			// handles what's left, so nothing here shadows an existing control.
+			if ((evt.target as HTMLElement).closest("a, button, input, textarea, select")) return;
+
+			// Cmd/Ctrl is the conventional multi-select modifier, and shift extends
+			// a range — matching the checkboxes and every file list users know.
+			if (evt.metaKey || evt.ctrlKey) {
+				this.applySelect(record.path, false, !this.selection.has(record.path));
+				return;
+			}
+			if (evt.shiftKey) {
+				this.applySelect(record.path, true, !this.selection.has(record.path));
+				return;
+			}
+			new PersonActionsModal(this.plugin, record).open();
+		};
+	}
+
+	/**
+	 * Toggle one row, or extend from the last click when shift is held.
+	 *
+	 * Ranges resolve against the order currently on screen, so a shift-click after
+	 * re-sorting selects what the user can actually see between the two rows.
+	 */
+	private onSelectClick(path: string, evt: MouseEvent, box: HTMLInputElement): void {
+		this.applySelect(path, evt.shiftKey, box.checked);
+	}
+
+	/**
+	 * @param select The state `path` should end up in; a shift-click applies the
+	 *   same state across the range, so dragging back over a selection clears it.
+	 */
+	private applySelect(path: string, shift: boolean, select: boolean): void {
+		if (shift && this.lastClicked && this.lastClicked !== path) {
+			const from = this.rowOrder.indexOf(this.lastClicked);
+			const to = this.rowOrder.indexOf(path);
+			if (from !== -1 && to !== -1) {
+				const [lo, hi] = from < to ? [from, to] : [to, from];
+				for (let i = lo; i <= hi; i++) {
+					if (select) this.selection.add(this.rowOrder[i]);
+					else this.selection.delete(this.rowOrder[i]);
+				}
+				this.lastClicked = path;
+				this.renderList();
+				this.renderBulkBar();
+				return;
+			}
+		}
+
+		if (select) this.selection.add(path);
+		else this.selection.delete(path);
+		this.lastClicked = path;
+		this.renderBulkBar();
+		this.syncRowSelectedClass();
+	}
+
+	/** Reflect selection without rebuilding rows, which would lose focus. */
+	private syncRowSelectedClass(): void {
+		const rows = Array.from(this.listEl.children) as HTMLElement[];
+		for (let i = 0; i < rows.length; i++) {
+			const path = rows[i].dataset.prmPath;
+			if (path === undefined) continue;
+			const on = this.selection.has(path);
+			rows[i].toggleClass("prm-row-selected", on);
+			// A modifier-click on the row changes selection without touching the
+			// box, so the box has to be brought back in line.
+			const box = rows[i].querySelector<HTMLInputElement>(".prm-select");
+			if (box && box.checked !== on) box.checked = on;
+		}
 	}
 
 	private iconButton(
@@ -480,6 +709,17 @@ export class PrmDashboardView extends ItemView {
 	}
 
 	// ------------------------------------------------------------------ selection
+
+	/** Paths of rows the search box hasn't hidden. */
+	private visiblePaths(): string[] {
+		const out: string[] = [];
+		for (const child of Array.from(this.listEl.children)) {
+			const el = child as HTMLElement;
+			const path = el.dataset.prmPath;
+			if (path !== undefined && !el.hasClass("prm-hidden")) out.push(path);
+		}
+		return out;
+	}
 
 	private selectedRecords(): PersonRecord[] {
 		const records = this.plugin.engine.all().filter((r) => {
@@ -521,6 +761,17 @@ export class PrmDashboardView extends ItemView {
 					(a, b) =>
 						(a.cadenceDays ?? Infinity) - (b.cadenceDays ?? Infinity) || byName(a, b),
 				);
+			case "tags":
+				// Grouped by first tag; the untagged collect at the end rather than
+				// sorting under an empty string at the top.
+				return records.sort((a, b) => {
+					const at = a.tags[0];
+					const bt = b.tags[0];
+					if (at === undefined && bt === undefined) return byName(a, b);
+					if (at === undefined) return 1;
+					if (bt === undefined) return -1;
+					return at.localeCompare(bt) || byName(a, b);
+				});
 			case "urgency":
 			default:
 				return records.sort((a, b) => b.overdueDays - a.overdueDays || byName(a, b));

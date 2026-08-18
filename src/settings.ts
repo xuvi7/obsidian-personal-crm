@@ -27,6 +27,11 @@ export interface PrmSettings {
 	requireTagOrType: boolean;
 	/** Basename fragments that are never people, e.g. templates. */
 	personExclusions: string[];
+	/**
+	 * Tags that mark a note as a person rather than grouping them. Hidden from the
+	 * tag list so every row isn't captioned with the same structural tag.
+	 */
+	markerTags: string[];
 
 	/** Folder new person notes are created in. Empty = the first people folder. */
 	newPersonFolder: string;
@@ -79,6 +84,7 @@ export const DEFAULT_SETTINGS: PrmSettings = {
 	personTypeValue: "",
 	requireTagOrType: false,
 	personExclusions: ["template", "templates", "untitled", "index", "MOC"],
+	markerTags: ["people", "person", "contact", "contacts"],
 
 	newPersonFolder: "",
 	newPersonTemplate: "",
@@ -149,10 +155,14 @@ function splitList(raw: string): string[] {
 }
 
 /** Settings that hold a list but are edited as one comma-separated field. */
-const CSV_KEYS: Record<string, "personTags" | "personExclusions" | "createdDateKeys"> = {
+const CSV_KEYS: Record<
+	string,
+	"personTags" | "personExclusions" | "createdDateKeys" | "markerTags"
+> = {
 	personTagsCsv: "personTags",
 	personExclusionsCsv: "personExclusions",
 	createdDateKeysCsv: "createdDateKeys",
+	markerTagsCsv: "markerTags",
 };
 
 /**
@@ -384,6 +394,16 @@ export class PrmSettingTab extends PluginSettingTab {
 					name: "Require a tag or field inside the folders",
 					desc: "Off means every note in the people folders is a person. Turn on if those folders hold other things too.",
 					control: { type: "toggle", key: "requireTagOrType" },
+				},
+				{
+					name: "Marker tags",
+					desc: "Tags that say “this is a person” rather than describing a group. Hidden from the tag list, so a tag every person shares doesn't caption every row.",
+					aliases: ["tags", "groups", "marker"],
+					control: {
+						type: "text",
+						key: "markerTagsCsv",
+						placeholder: "people, person",
+					},
 				},
 				{
 					name: "Never treat these as people",

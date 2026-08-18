@@ -151,7 +151,35 @@ with a hairline under each row showing how far through their cadence they are.
 Tabs cover Due, Tracked, Unclassified, Birthdays and Paused. Clicking a “last
 contact” date opens the note it came from.
 
+**Click a row** to open that person's panel: their note's own content, a date and
+notes box for logging, and one-click access to cadence, snooze, tags and the note
+itself. The row's icon buttons stay for the fast path.
+
 The **status bar** shows a live count of who's waiting.
+
+### Selecting several people
+
+**Cmd/Ctrl-click** a row (or tick its checkbox) to select it; **Shift-click**
+extends a range through what's currently on screen. **Select all** takes
+everyone the filter is showing, so you can filter first and select second.
+
+With a selection, a bar appears above the list: **Log contact** (one date and
+note applied to everyone), **Set cadence**, **Add tag**, **Remove tag** and
+**Snooze**. Each is a single undo step, not one per person.
+
+### Tags
+
+Tags are ordinary Obsidian tags — the plugin reads and writes the note's own
+`tags:` frontmatter, so they're the same tags the tag pane, `tag:` search, graph
+filters and Dataview already see. Nothing is stored in a plugin-only field.
+
+Tags show as chips on each row; click one to filter to it, click again to clear.
+A `#`-prefixed search matches tags only, so `#gym` won't also match someone whose
+relationship reads “climbing gym”. Sorting by **Tag** groups people by their
+first tag and puts untagged people last.
+
+The marker tags that identify person notes (`#people`, `#person`, …) are left out
+of the chips, since they'd otherwise appear on everyone.
 
 ## Undo
 
@@ -219,9 +247,10 @@ Effective last contact is the **most recent** of any dated-note mention and
 
 ### Known limits
 
-- `prm-*` values are read from **frontmatter only**. Dataview inline fields
-  (`prm-tier:: close`) are not read, because that would require reading files
-  from disk on every index.
+- `prm-*` values and tags are read from **frontmatter only**. Dataview inline
+  fields (`prm-tier:: close`) and inline `#tags` typed in the body are not read,
+  because that would require reading files from disk on every index — and writing
+  a body tag would mean editing your prose by position.
 - For someone you've never contacted, the cadence counts from the note's creation
   date. If no creation field is found the file's timestamp is used, which sync and
   `git clone` both reset — those rows are labelled *estimated* so you can tell.

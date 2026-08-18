@@ -172,6 +172,8 @@
 	gap: 0.75rem;
 	padding: 0.55rem 0.5rem 0.6rem;
 	border-bottom: 1px solid var(--background-modifier-border);
+	/* The row opens the person panel; its own controls keep their own cursors. */
+	cursor: pointer;
 }
 
 .prm-row:hover {
@@ -403,6 +405,14 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 0.35rem;
+}
+
+/* A Setting row inside a modal defaults to generous vertical padding, which
+   pushes the notes box and actions out of view in a short person panel. */
+.prm-inline-setting {
+	padding-top: 0.5rem;
+	padding-bottom: 0;
+	border-top: none;
 }
 
 .prm-reachout-nav {
@@ -863,4 +873,82 @@
 	justify-content: center;
 	margin-top: 0.9rem;
 	flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------- multi-select and tags */
+
+.prm-select {
+	flex: 0 0 auto;
+	align-self: center;
+	margin: 0;
+	cursor: pointer;
+}
+
+.prm-row-selected {
+	background: var(--background-modifier-hover);
+}
+
+/* Selected rows keep their actions visible: the row is already "active". */
+.prm-row-selected .prm-row-actions {
+	opacity: 1;
+}
+
+/* The bar sits in the fixed chrome so actions stay reachable however far the
+   selection is scrolled. Collapsed to nothing when nothing is selected. */
+.prm-bulkbar {
+	display: none;
+}
+
+.prm-bulkbar-active {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	flex-wrap: wrap;
+	padding: 0.5rem 0 0.6rem;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.prm-bulk-count {
+	font-weight: 600;
+	font-size: var(--font-ui-small);
+	margin-right: 0.2rem;
+}
+
+.prm-bulk-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	font-size: var(--font-ui-smaller);
+}
+
+.prm-bulk-clear {
+	margin-left: auto;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.prm-bulk-clear:hover {
+	color: var(--text-normal);
+}
+
+.prm-tag {
+	color: var(--text-accent);
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.prm-tag:hover {
+	text-decoration: underline;
+}
+
+@media (max-width: 700px) {
+	.prm-bulkbar-active {
+		gap: 0.3rem;
+	}
+
+	.prm-bulk-clear {
+		margin-left: 0;
+	}
 }

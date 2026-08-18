@@ -38,3 +38,35 @@ export function asText(value: unknown): string | null {
 	}
 	return null;
 }
+
+/**
+ * Read a frontmatter `tags` value, which Obsidian accepts as either a single
+ * string, a comma-separated string, or a list.
+ */
+export function readTagList(value: unknown): string[] {
+	const out: string[] = [];
+	const push = (raw: unknown) => {
+		const text = asText(raw);
+		if (text === null) return;
+		for (const part of text.split(",")) {
+			const tag = part.trim().replace(/^#/, "");
+			if (tag.length > 0) out.push(tag);
+		}
+	};
+	if (Array.isArray(value)) for (const v of value) push(v);
+	else push(value);
+	return out;
+}
+
+/** Case-insensitive de-duplication that keeps the first spelling seen. */
+export function dedupeTags(tags: string[]): string[] {
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const tag of tags) {
+		const key = tag.toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		out.push(tag);
+	}
+	return out;
+}

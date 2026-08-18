@@ -33,6 +33,8 @@ export interface PersonRecord {
 	birthday: string | null;
 	relationship: string | null;
 	createdDate: string | null;
+	/** Frontmatter tags used as groups, without '#' and without the marker tags. */
+	tags: string[];
 
 	// --- derived ---
 	/** Distinct dates on which an interaction was recorded, newest first. */

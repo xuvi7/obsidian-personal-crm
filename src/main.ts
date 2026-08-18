@@ -30,11 +30,26 @@ import {
 	PersonCreation,
 	PersonPlan,
 } from "./contacts";
-import { frontmatterOf, MutableFrontmatter } from "./frontmatter";
+import {
+	dedupeTags,
+	frontmatterOf,
+	MutableFrontmatter,
+	readTagList,
+} from "./frontmatter";
 import { defaultPersonNote, renderTemplate, sanitizeNoteName } from "./templates";
 
 interface WriteOptions {
 	silent?: boolean;
+}
+
+/** What a bulk edit actually did, so callers don't have to parse a toast. */
+export interface BulkResult {
+	changed: number;
+	failed: string[];
+}
+
+function describeCount(n: number, one: string, many: string): string {
+	return `${n} ${n === 1 ? one : many}`;
 }
 
 export default class PrmPlugin extends Plugin {
@@ -584,6 +599,139 @@ export default class PrmPlugin extends Plugin {
 			await mutate();
 			const after = await this.app.vault.read(file);
 			return this.undo.record(label, [{ path: file.path, before, after }]);
+		});
+	}
+
+	// ----------------------------------------------------------------- bulk writes
+
+	/**
+	 * Apply the same edit to many notes as one undoable step.
+	 *
+	 * Each note is snapshotted inside its own queued turn, so a concurrent write to
+	 * one of them can't be absorbed into this entry — and one failure doesn't lose
+	 * the notes that already succeeded, since they are recorded either way.
+	 */
+	private async trackedMany(
+		paths: string[],
+		label: string,
+		mutate: (file: TFile) => Promise<void>,
+		onProgress?: (done: number, total: number) => void,
+	): Promise<BulkResult> {
+		const snapshots: FileSnapshot[] = [];
+		const failed: string[] = [];
+
+		for (let i = 0; i < paths.length; i++) {
+			const file = this.app.vault.getAbstractFileByPath(paths[i]);
+			if (!(file instanceof TFile)) {
+				failed.push(paths[i]);
+				continue;
+			}
+			try {
+				await this.writes.run(file.path, async () => {
+					const before = await this.app.vault.read(file);
+					await mutate(file);
+					const after = await this.app.vault.read(file);
+					if (before !== after) snapshots.push({ path: file.path, before, after });
+				});
+			} catch (err) {
+				failed.push(file.basename);
+				console.error(`[personal-crm] bulk edit failed for ${file.path}`, err);
+			}
+			onProgress?.(i + 1, paths.length);
+			// Yield periodically so a large selection doesn't freeze the window.
+			if (i % 25 === 24) await new Promise((r) => window.setTimeout(r, 0));
+		}
+
+		const entry = snapshots.length > 0 ? this.undo.record(label, snapshots) : null;
+		this.engine.rebuild();
+		this.refreshStatusBar();
+
+		const message = [
+			snapshots.length === 0 ? "Nothing needed changing" : label,
+			failed.length > 0 ? `${failed.length} failed` : "",
+		]
+			.filter((p) => p.length > 0)
+			.join(" · ");
+		if (entry) this.noticeWithUndo(message, entry);
+		else new Notice(`${message}.`);
+
+		return { changed: snapshots.length, failed };
+	}
+
+	async bulkLogContact(paths: string[], date = todayISO(), note?: string): Promise<BulkResult> {
+		if (!isISODate(date)) {
+			new Notice(`"${date}" isn't a valid date.`);
+			return { changed: 0, failed: [] };
+		}
+		const label = `Log contact with ${describeCount(paths.length, "person", "people")}`;
+		return this.trackedMany(paths, label, async (file) => {
+			if (this.settings.logToBody) await this.appendBodyLog(file, date, note);
+			await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
+				fm[FRONTMATTER_KEYS.lastContacted] = date;
+				delete fm[FRONTMATTER_KEYS.snoozeUntil];
+			});
+		});
+	}
+
+	async bulkSetTier(paths: string[], tierId: string | null): Promise<BulkResult> {
+		const tier = this.settings.tiers.find((t) => t.id === tierId);
+		const label = tier
+			? `Set ${describeCount(paths.length, "person", "people")} to ${tier.label}`
+			: `Stop tracking ${describeCount(paths.length, "person", "people")}`;
+		return this.trackedMany(paths, label, async (file) => {
+			await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
+				if (tierId === null) delete fm[FRONTMATTER_KEYS.tier];
+				else fm[FRONTMATTER_KEYS.tier] = tierId;
+				if (tierId !== null) delete fm[FRONTMATTER_KEYS.paused];
+			});
+		});
+	}
+
+	async bulkSnooze(paths: string[], until: string): Promise<BulkResult> {
+		if (!isISODate(until)) {
+			new Notice(`"${until}" isn't a valid date.`);
+			return { changed: 0, failed: [] };
+		}
+		return this.trackedMany(
+			paths,
+			`Snooze ${describeCount(paths.length, "person", "people")} until ${until}`,
+			async (file) => {
+				await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
+					fm[FRONTMATTER_KEYS.snoozeUntil] = until;
+				});
+			},
+		);
+	}
+
+	/**
+	 * Add or remove a tag across a selection.
+	 *
+	 * Writes the note's own `tags` frontmatter, so the tag is a real Obsidian tag —
+	 * it shows in search, the tag pane and Dataview, not only in this plugin. Tags
+	 * written in the body with `#` are left alone; only frontmatter is managed.
+	 */
+	async bulkTag(paths: string[], tag: string, add: boolean): Promise<BulkResult> {
+		const clean = tag.trim().replace(/^#/, "");
+		if (clean.length === 0) {
+			new Notice("Enter a tag.");
+			return { changed: 0, failed: [] };
+		}
+		const label = add
+			? `Tag ${describeCount(paths.length, "person", "people")} with ${clean}`
+			: `Remove ${clean} from ${describeCount(paths.length, "person", "people")}`;
+
+		return this.trackedMany(paths, label, async (file) => {
+			await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
+				const current = readTagList(fm["tags"] ?? fm["tag"]);
+				const key = clean.toLowerCase();
+				const without = current.filter((t) => t.toLowerCase() !== key);
+				const next = add ? dedupeTags([...without, clean]) : without;
+
+				// Keep using whichever key the note already has, or `tags` for a new one.
+				const field = fm["tags"] !== undefined ? "tags" : fm["tag"] !== undefined ? "tag" : "tags";
+				if (next.length === 0) delete fm[field];
+				else fm[field] = next;
+			});
 		});
 	}
 

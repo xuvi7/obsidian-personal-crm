@@ -316,6 +316,103 @@ export class TierPickerModal extends SuggestModal<TierChoice> {
 	}
 }
 
+// -------------------------------------------------------- bulk tier / tag pickers
+
+type BulkTier = { kind: "tier"; tier: Tier } | { kind: "clear" };
+
+/** Choose one cadence to apply to a whole selection. */
+export class TierChooserModal extends SuggestModal<BulkTier> {
+	constructor(
+		private plugin: PrmPlugin,
+		count: number,
+		private onPick: (tierId: string | null) => void,
+	) {
+		super(plugin.app);
+		this.setPlaceholder(
+			`How often do you want to be in touch with these ${count} people?`,
+		);
+	}
+
+	getSuggestions(query: string): BulkTier[] {
+		const choices: BulkTier[] = this.plugin.settings.tiers.map((tier) => ({
+			kind: "tier" as const,
+			tier,
+		}));
+		choices.push({ kind: "clear" });
+		const q = query.toLowerCase().trim();
+		if (!q) return choices;
+		return choices.filter((c) =>
+			(c.kind === "tier" ? c.tier.label : "clear tier").toLowerCase().includes(q),
+		);
+	}
+
+	renderSuggestion(choice: BulkTier, el: HTMLElement): void {
+		el.addClass("prm-suggestion");
+		if (choice.kind === "clear") {
+			el.createSpan({ text: "Clear tier (stop tracking)", cls: "prm-suggestion-title" });
+			return;
+		}
+		const dot = el.createSpan({ cls: "prm-dot" });
+		dot.style.setProperty("--prm-chip-color", choice.tier.color);
+		el.createSpan({ text: choice.tier.label, cls: "prm-suggestion-title" });
+		el.createSpan({
+			text: `every ${formatDuration(choice.tier.cadenceDays)}`,
+			cls: "prm-suggestion-aux",
+		});
+	}
+
+	onChooseSuggestion(choice: BulkTier): void {
+		this.onPick(choice.kind === "clear" ? null : choice.tier.id);
+	}
+}
+
+interface TagChoice {
+	tag: string;
+	/** True when this is the query itself rather than an existing tag. */
+	isNew: boolean;
+}
+
+/**
+ * Pick an existing tag or type a new one.
+ *
+ * Existing tags come first and are ordered by how many people already carry them,
+ * which is what makes a large tag list usable.
+ */
+export class TagPickerModal extends SuggestModal<TagChoice> {
+	constructor(
+		private plugin: PrmPlugin,
+		private mode: "add" | "remove",
+		private choices: string[],
+		private onPick: (tag: string) => void,
+	) {
+		super(plugin.app);
+		this.setPlaceholder(
+			mode === "add" ? "Tag them with… (type to create)" : "Remove which tag?",
+		);
+	}
+
+	getSuggestions(query: string): TagChoice[] {
+		const q = query.trim().replace(/^#/, "");
+		const matches = this.choices
+			.filter((tag) => tag.toLowerCase().includes(q.toLowerCase()))
+			.map((tag) => ({ tag, isNew: false }));
+
+		if (this.mode === "remove" || q.length === 0) return matches;
+		const exact = matches.some((m) => m.tag.toLowerCase() === q.toLowerCase());
+		return exact ? matches : [...matches, { tag: q, isNew: true }];
+	}
+
+	renderSuggestion(choice: TagChoice, el: HTMLElement): void {
+		el.addClass("prm-suggestion");
+		el.createSpan({ text: `#${choice.tag}`, cls: "prm-suggestion-title" });
+		if (choice.isNew) el.createSpan({ text: "new tag", cls: "prm-suggestion-aux" });
+	}
+
+	onChooseSuggestion(choice: TagChoice): void {
+		this.onPick(choice.tag);
+	}
+}
+
 // ----------------------------------------------------------------- snooze modal
 
 interface SnoozeChoice {
@@ -337,8 +434,13 @@ export class SnoozeModal extends SuggestModal<SnoozeChoice> {
 	constructor(
 		private plugin: PrmPlugin,
 		private record: PersonRecord,
-		/** Called with whether a choice was actually made, so callers don't advance on Escape. */
-		private onDone?: (chosen: boolean) => void,
+		/**
+		 * Called with whether a choice was made, and the date chosen. Callers must not
+		 * advance on Escape, and the bulk path needs the date without the write.
+		 */
+		private onDone?: (chosen: boolean, until?: string) => void,
+		/** When set, the modal reports the choice instead of writing it itself. */
+		private reportOnly = false,
 	) {
 		super(plugin.app);
 		this.setPlaceholder(`Hide ${record.name} from the queue for…`);
@@ -364,11 +466,14 @@ export class SnoozeModal extends SuggestModal<SnoozeChoice> {
 	}
 
 	private async apply(choice: SnoozeChoice): Promise<void> {
-		const file = this.app.vault.getAbstractFileByPath(this.record.path);
-		if (file instanceof TFile) {
-			await this.plugin.snooze(file, addDays(todayISO(), choice.days));
+		const until = addDays(todayISO(), choice.days);
+		if (this.reportOnly) {
+			this.onDone?.(true, until);
+			return;
 		}
-		this.onDone?.(true);
+		const file = this.app.vault.getAbstractFileByPath(this.record.path);
+		if (file instanceof TFile) await this.plugin.snooze(file, until);
+		this.onDone?.(true, until);
 	}
 
 	onClose(): void {
@@ -569,19 +674,31 @@ export class LogContactModal extends Modal {
 	private saveButton: HTMLButtonElement | null = null;
 	private error: HTMLElement | null = null;
 
+	/**
+	 * @param bulk When set, the modal collects a date and note for a whole
+	 *   selection and hands them back instead of writing one person's note, so
+	 *   bulk logging gets the same notes box as logging one person.
+	 */
 	constructor(
 		private plugin: PrmPlugin,
-		private record: PersonRecord,
+		private record: PersonRecord | null,
+		private bulk?: { count: number; onSubmit: (date: string, note?: string) => void },
 	) {
 		super(plugin.app);
 	}
 
 	onOpen(): void {
-		this.titleEl.setText(`Log contact with ${this.record.name}`);
+		this.titleEl.setText(
+			this.bulk
+				? `Log contact with ${this.bulk.count} ${this.bulk.count === 1 ? "person" : "people"}`
+				: `Log contact with ${this.record?.name ?? "person"}`,
+		);
 		const { contentEl } = this;
 		contentEl.addClass("prm-log-modal");
 
-		contentEl.createEl("p", { cls: "prm-muted", text: lastContactLabel(this.record) });
+		if (this.record) {
+			contentEl.createEl("p", { cls: "prm-muted", text: lastContactLabel(this.record) });
+		}
 
 		new Setting(contentEl).setName("Date").addText((t) => {
 			t.setValue(this.date).onChange((v) => {
@@ -621,6 +738,13 @@ export class LogContactModal extends Modal {
 
 	private async submit(): Promise<void> {
 		if (!isISODate(this.date)) return;
+		if (this.bulk) {
+			const { onSubmit } = this.bulk;
+			this.close();
+			onSubmit(this.date, this.note.trim() || undefined);
+			return;
+		}
+		if (!this.record) return;
 		const file = this.app.vault.getAbstractFileByPath(this.record.path);
 		this.close();
 		if (file instanceof TFile) {
@@ -640,6 +764,184 @@ export class LogContactModal extends Modal {
 	}
 
 	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+// ------------------------------------------------------------ person actions
+
+/**
+ * Everything you can do to one person, in one place.
+ *
+ * A plain click on a dashboard row lands here. The row's icon buttons stay for
+ * the fast path, but they can't show the note's own content, and having to
+ * remember which small icon does what is the thing that makes a row feel opaque.
+ */
+export class PersonActionsModal extends Modal {
+	private date = todayISO();
+	private note = "";
+	private preview: Component | null = null;
+	private busy = false;
+	private errorEl: HTMLElement | null = null;
+	private logButton: HTMLButtonElement | null = null;
+
+	constructor(
+		private plugin: PrmPlugin,
+		private record: PersonRecord,
+	) {
+		super(plugin.app);
+		this.modalEl.addClass("prm-reachout-modal");
+	}
+
+	onOpen(): void {
+		this.preview = new Component();
+		this.preview.load();
+		this.render();
+	}
+
+	private render(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+
+		// The record can go stale while the modal is open — a log from here
+		// rewrites it — so read the live one each render.
+		const record = this.plugin.engine.get(this.record.path) ?? this.record;
+		this.record = record;
+		const tier = tierById(this.plugin.settings, record.tierId);
+
+		this.titleEl.setText(record.name);
+
+		const header = contentEl.createDiv({ cls: "prm-reachout-header" });
+		const nameRow = header.createDiv({ cls: "prm-reachout-namerow" });
+		renderTierChip(nameRow, tier);
+		if (record.status === "overdue") {
+			nameRow.createSpan({
+				cls: "prm-chip prm-chip-overdue",
+				text:
+					record.overdueDays === 0
+						? "due today"
+						: `overdue ${formatDuration(record.overdueDays)}`,
+			});
+		} else if (record.status === "due-soon") {
+			nameRow.createSpan({
+				cls: "prm-chip prm-chip-soon",
+				text: `due in ${formatDuration(record.overdueDays)}`,
+			});
+		} else if (record.status === "snoozed" && record.snoozeUntil) {
+			nameRow.createSpan({
+				cls: "prm-chip prm-chip-muted",
+				text: `snoozed to ${record.snoozeUntil}`,
+			});
+		}
+		for (const tag of record.tags) {
+			nameRow.createSpan({ cls: "prm-chip prm-chip-muted", text: `#${tag}` });
+		}
+
+		const meta = header.createDiv({ cls: "prm-reachout-meta" });
+		meta.createSpan({ text: lastContactLabel(record) });
+		if (record.mentionCount > 0) {
+			meta.createSpan({ text: `${record.mentionCount} mentions` });
+		}
+		if (record.relationship) meta.createSpan({ text: record.relationship });
+
+		const previewEl = contentEl.createDiv({ cls: "prm-preview" });
+		const file = this.app.vault.getAbstractFileByPath(record.path);
+		if (file instanceof TFile && this.preview) {
+			void renderNotePreview(this.app, previewEl, file, this.preview);
+		}
+
+		const dateSetting = new Setting(contentEl).setName("Date").addText((t) => {
+			t.setValue(this.date).onChange((v) => {
+				this.date = v.trim();
+				this.validate();
+			});
+			t.inputEl.type = "date";
+			return t;
+		});
+		dateSetting.setClass("prm-inline-setting");
+
+		this.errorEl = contentEl.createDiv({ cls: "prm-form-error" });
+
+		const noteField = noteEditor(contentEl, {
+			label: "Notes",
+			hint: "Optional. Written under the log entry, keeping your line breaks.",
+			placeholder: "What did you talk about?",
+			value: this.note,
+			onChange: (v) => (this.note = v),
+			onSubmit: () => void this.logIt(),
+		});
+		window.setTimeout(() => noteField.focus(), 0);
+
+		// Logging is the reason the panel is open; the rest are one click away.
+		const primary = contentEl.createDiv({ cls: "prm-reachout-actions" });
+		const log = primary.createEl("button", { cls: "prm-action-btn mod-cta" });
+		setIcon(log.createSpan({ cls: "prm-action-icon" }), "check");
+		log.createSpan({ text: "Log contact" });
+		log.onclick = () => void this.logIt();
+		this.logButton = log;
+
+		this.actionButton(primary, "gauge", "Set cadence", () => {
+			new TierPickerModal(this.plugin, record).open();
+			this.close();
+		});
+		this.actionButton(primary, "alarm-clock", "Snooze", () => {
+			new SnoozeModal(this.plugin, record).open();
+			this.close();
+		});
+		this.actionButton(primary, "tag", "Tags", () => {
+			new TagPickerModal(this.plugin, "add", this.plugin.engine.allTags(), (tag) => {
+				void this.plugin.bulkTag([record.path], tag, true);
+			}).open();
+			this.close();
+		});
+		this.actionButton(primary, "file-text", "Open note", () => {
+			void this.plugin.openPerson(record);
+			this.close();
+		});
+
+		this.validate();
+	}
+
+	private actionButton(
+		parent: HTMLElement,
+		icon: string,
+		label: string,
+		onClick: () => void,
+	): void {
+		const btn = parent.createEl("button", { cls: "prm-action-btn" });
+		setIcon(btn.createSpan({ cls: "prm-action-icon" }), icon);
+		btn.createSpan({ text: label });
+		btn.onclick = onClick;
+	}
+
+	private async logIt(): Promise<void> {
+		if (this.busy || !isISODate(this.date)) return;
+		this.busy = true;
+		try {
+			const file = this.app.vault.getAbstractFileByPath(this.record.path);
+			if (file instanceof TFile) {
+				await this.plugin.logContact(file, this.date, this.note.trim() || undefined);
+			}
+			this.close();
+		} finally {
+			this.busy = false;
+		}
+	}
+
+	/** Clearing a date input yields "", which would otherwise wipe the stored date. */
+	private validate(): void {
+		const valid = isISODate(this.date);
+		if (this.logButton) this.logButton.disabled = !valid;
+		if (this.errorEl) {
+			this.errorEl.setText(
+				valid ? "" : this.date.length === 0 ? "Pick a date." : "Not a valid date.",
+			);
+		}
+	}
+
+	onClose(): void {
+		this.preview?.unload();
+		this.preview = null;
 		this.contentEl.empty();
 	}
 }

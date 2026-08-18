@@ -3,6 +3,40 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Multi-select.** Cmd/Ctrl-click a row or tick its checkbox to select it;
+  shift-click extends a range through the rows currently on screen. **Select all**
+  takes whatever the filter is showing, so you can narrow first and select second.
+- **Bulk actions** on a selection: log contact, set cadence, add tag, remove tag
+  and snooze. Each lands as a **single undo step** rather than one per person, and
+  bulk logging asks for a date and note once and applies both to everyone.
+  A person whose note has gone missing is reported without sinking the rest.
+- **Tags**, as ordinary Obsidian tags — read and written in the note's own `tags:`
+  frontmatter, so they're the same tags the tag pane, `tag:` search, graph filters
+  and Dataview already see. Shown as chips on each row; click to filter, click
+  again to clear. The marker tags that identify person notes are left out of the
+  chips so they don't appear on everyone.
+- **Sort by tag**, grouping people by their first tag with untagged people last.
+- A **person panel** on clicking a row: the note's own content, a date and notes
+  box for logging, and one click each to cadence, snooze, tags and the note. The
+  row's icon buttons stay for the fast path.
+- Searching with a leading `#` matches **tags only**, so `#gym` doesn't also match
+  someone whose relationship reads "climbing gym".
+
+### Changed
+
+- The row checkbox sits inside the name row rather than being a column of the row
+  itself. Below ~700px the row stacks into a column, where a direct child stretched
+  to full width — and sidebar leaves are routinely that narrow.
+- **Select all** is purely additive instead of toggling. A button labelled "Select
+  all" can't announce which way a toggle will go, and the selection bar's *Clear*
+  already undoes it.
+- The bulk write helpers return what they changed and what failed, so callers no
+  longer have to read a toast to find out.
+
 ## 1.5.0 — 2026-08-17
 
 ### Added

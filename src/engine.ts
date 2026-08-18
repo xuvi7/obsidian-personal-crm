@@ -23,7 +23,7 @@ import {
 	todayISO,
 } from "./dates";
 import { isInFolder, parseJournalDate } from "./journal";
-import { asText, frontmatterOf } from "./frontmatter";
+import { asText, dedupeTags, frontmatterOf, readTagList } from "./frontmatter";
 
 interface Range {
 	start: number;
@@ -42,6 +42,8 @@ export class PrmEngine {
 	private notesByDate = new Map<string, TFile[]>();
 	/** Exclusion fragments, tokenized once per rebuild rather than per file. */
 	private exclusionTokens: string[][] = [];
+	/** Lowercased marker tags, so group tags can be told from identification ones. */
+	private markerTagSet = new Set<string>();
 	private listeners = new Set<() => void>();
 	private diag: PrmDiagnostics = emptyDiagnostics();
 
@@ -121,6 +123,12 @@ export class PrmEngine {
 		this.exclusionTokens = this.settings.personExclusions
 			.map((fragment) => nameTokens(fragment))
 			.filter((tokens) => tokens.length > 0);
+
+		this.markerTagSet = new Set<string>();
+		for (const tag of [...this.settings.markerTags, ...this.settings.personTags]) {
+			const clean = tag.trim().replace(/^#/, "").toLowerCase();
+			if (clean.length > 0) this.markerTagSet.add(clean);
+		}
 
 		const people = new Map<string, PersonRecord>();
 		let skipped = 0;
@@ -411,6 +419,7 @@ export class PrmEngine {
 			path: file.path,
 			name: file.basename,
 			aliases: normalizeAliases(fm["aliases"] ?? fm["alias"]),
+			tags: this.groupTags(fm),
 
 			tierId: typeof fm[K.tier] === "string" ? (fm[K.tier] as string).trim() : null,
 			tierMissing: false,
@@ -440,6 +449,31 @@ export class PrmEngine {
 		if (logged) record.sources.set(logged, file.path);
 
 		return record;
+	}
+
+	/**
+	 * The note's frontmatter tags, minus the ones that only say "this is a person".
+	 * Sorted so the dashboard and the tag sort are stable.
+	 */
+	private groupTags(fm: Record<string, unknown>): string[] {
+		const raw = readTagList(fm["tags"] ?? fm["tag"]);
+		if (raw.length === 0) return [];
+		const kept = raw.filter((tag) => !this.markerTagSet.has(tag.toLowerCase()));
+		return dedupeTags(kept).sort((a, b) => a.localeCompare(b));
+	}
+
+	/** Every group tag in use, for pickers and filters. */
+	allTags(): string[] {
+		const counts = new Map<string, number>();
+		for (const record of this.index.values()) {
+			for (const tag of record.tags) {
+				counts.set(tag, (counts.get(tag) ?? 0) + 1);
+			}
+		}
+		return Array.from(counts.keys()).sort((a, b) => {
+			const byUse = (counts.get(b) ?? 0) - (counts.get(a) ?? 0);
+			return byUse !== 0 ? byUse : a.localeCompare(b);
+		});
 	}
 
 	private finalize(record: PersonRecord, today: string): void {
