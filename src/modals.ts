@@ -15,6 +15,7 @@ import type PrmPlugin from "./main";
 import { tierById } from "./settings";
 import type { PersonRecord, Tier } from "./types";
 import { addDays, formatDuration, isISODate, relativeToToday, todayISO } from "./dates";
+import { buildHeatmap } from "./heatmap";
 import { loopFile, readLoops } from "./loops";
 
 /**
@@ -930,6 +931,8 @@ export class PersonActionsModal extends Modal {
 		if (record.relationship) meta.createSpan({ text: record.relationship });
 		if (record.location) meta.createSpan({ cls: "prm-place", text: record.location });
 
+		this.renderCalendar(contentEl.createDiv({ cls: "prm-cal" }), record);
+
 		const previewEl = contentEl.createDiv({ cls: "prm-preview prm-preview-fit" });
 		const file = this.app.vault.getAbstractFileByPath(record.path);
 		if (file instanceof TFile && this.preview) {
@@ -996,6 +999,67 @@ export class PersonActionsModal extends Modal {
 		});
 
 		this.validate();
+	}
+
+	/**
+	 * A year of contact, as a calendar.
+	 *
+	 * The shape is the thing a rhythm figure can't express: three dense months
+	 * followed by nothing looks identical to "every day" in the numbers, and
+	 * completely different here.
+	 */
+	private renderCalendar(host: HTMLElement, record: PersonRecord): void {
+		host.empty();
+		if (record.contactDates.length === 0) return;
+
+		const today = todayISO();
+		const map = buildHeatmap(record.contactDates, today, 53);
+
+		const head = host.createDiv({ cls: "prm-cal-head" });
+		head.createSpan({ cls: "prm-note-label", text: "Contact" });
+		const older = record.contactDates.length - map.inWindow;
+		head.createSpan({
+			cls: "prm-muted",
+			text:
+				older > 0
+					? `${map.inWindow} in the last year, ${older} before that`
+					: `${map.inWindow} in the last year`,
+		});
+
+		const grid = host.createDiv({ cls: "prm-cal-grid" });
+		for (const week of map.weeks) {
+			const col = grid.createDiv({ cls: "prm-cal-week" });
+			for (const cell of week) {
+				const el = col.createDiv({
+					cls: cell.contacted
+						? "prm-cal-day prm-cal-on"
+						: cell.future
+							? "prm-cal-day prm-cal-future"
+							: "prm-cal-day",
+				});
+				if (cell.date === null || cell.future) continue;
+				el.setAttribute("aria-label", cell.date);
+				el.title = cell.contacted ? `${cell.date} — contact` : cell.date;
+				if (!cell.contacted) continue;
+
+				// A filled day knows where it came from, so it can be opened.
+				const source = record.sources.get(cell.date);
+				if (source === undefined) continue;
+				el.addClass("prm-cal-link");
+				el.onclick = () => {
+					const file = this.app.vault.getAbstractFileByPath(source);
+					if (file instanceof TFile) void this.app.workspace.getLeaf(false).openFile(file);
+					this.close();
+				};
+			}
+		}
+
+		const labels = host.createDiv({ cls: "prm-cal-months" });
+		// Positioned by column so the labels line up with the grid they describe.
+		for (const { column, label } of map.monthLabels) {
+			const el = labels.createSpan({ cls: "prm-cal-month", text: label });
+			el.style.setProperty("--prm-cal-col", String(column));
+		}
 	}
 
 	/**

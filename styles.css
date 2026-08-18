@@ -435,6 +435,75 @@ a.prm-place:hover {
 	text-decoration: underline;
 }
 
+/* -------------------------------------------------------------- contact calendar */
+
+.prm-cal {
+	margin-top: 0.7rem;
+}
+
+.prm-cal-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem;
+	margin-bottom: 0.3rem;
+}
+
+/* Columns of seven days, scrolling horizontally on a narrow pane rather than
+   squeezing the cells to nothing. */
+.prm-cal-grid {
+	display: flex;
+	gap: 2px;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	padding-bottom: 2px;
+}
+
+.prm-cal-week {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 0 0 auto;
+}
+
+.prm-cal-day {
+	width: 9px;
+	height: 9px;
+	border-radius: 2px;
+	background: var(--background-modifier-border);
+}
+
+.prm-cal-on {
+	background: var(--interactive-accent);
+}
+
+/* Days after today are structure, not absence: don't draw them as empty days. */
+.prm-cal-future {
+	background: transparent;
+}
+
+.prm-cal-link {
+	cursor: pointer;
+}
+
+.prm-cal-link:hover {
+	outline: 1px solid var(--text-normal);
+}
+
+.prm-cal-months {
+	position: relative;
+	height: 1em;
+	margin-top: 2px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+/* Each label sits over its own column: 9px cell + 2px gap. */
+.prm-cal-month {
+	position: absolute;
+	left: calc(var(--prm-cal-col) * 11px);
+}
+
 /* ------------------------------------------------------------------ follow-ups */
 
 .prm-chip-drift {

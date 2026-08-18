@@ -180,16 +180,40 @@ interaction until it holds enough gaps and covers at least three weeks, which
 keeps it short for people you see often and long for people you don't. A median,
 so one long silence in an otherwise weekly friendship doesn't redefine it.
 
-Two things this deliberately doesn't do. A week of daily mentions — a trip, a
-course, a stretch of sitting next to someone — isn't a one-day rhythm, so a burst
-that doesn't span real time produces no verdict at all. And doubling a short
-rhythm isn't enough on its own: the threshold has a two-week floor, so a daily
-correspondent isn't flagged after three quiet days.
+Drift is a **band**, not a threshold: quiet for more than twice the usual gap
+(never sooner than a fortnight), but not more than twelve times it (never sooner
+than three months). Both edges exist because of ways the naive rule got it wrong:
 
-On the author's vault, 102 of 239 people have enough history for a rhythm, 48 read
-as drifting, and **32 of those aren't overdue by their tier** — which is the point.
-The person panel shows the measured rhythm ("usually every 2w") next to the cadence
-you set, so a disagreement between the two is visible.
+- **The lower floor.** Doubling a one-day rhythm isn't a drifting friendship, so a
+  daily correspondent isn't flagged after three quiet days.
+- **The upper ceiling.** Intensity is often situational — an internship, a course,
+  a season of sitting next to someone. When that context ends, contact *stops*
+  rather than thins, and without a ceiling three months of daily contact followed
+  by six months of silence reads as "usually every day, 180 days late", forever.
+  A silence of 180× the rhythm isn't something a reminder can fix. Drift is the
+  recoverable middle; the cadence you assign is the right tool for deciding whether
+  to restart a relationship whose situation is over.
+
+A burst also has to span real time before it counts as a rhythm at all: six daily
+mentions inside one week produce no verdict, because that's a week of proximity,
+not a cadence.
+
+On the author's vault, 102 of 239 people have enough history for a rhythm, 33 read
+as drifting — **21 of them not overdue by their tier** — and 16 more sit past the
+ceiling as situations that ended. The four constants are in `engine.ts` if that
+line falls in the wrong place for your relationships.
+
+### Contact calendar
+
+No single number can carry the shape of a relationship. "Daily for three months,
+then nothing" and "every fortnight for years, quiet lately" produce the same rhythm
+figure and mean completely different things.
+
+So the person panel draws a year of contact as a calendar, one cell per day, with a
+count of anything older. A dense block followed by empty weeks is instantly
+recognisable as a context that ended; evenly scattered cells thinning out at the
+right is a friendship actually cooling. Clicking a filled day opens the note the
+interaction came from.
 
 ### Reach-outs in your daily note
 

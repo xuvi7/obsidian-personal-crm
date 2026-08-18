@@ -24,13 +24,24 @@ All notable changes to Personal CRM. Versions follow
   gap between recent interactions — and flags someone when the current silence is
   long against *their own* rhythm rather than the cadence you assigned. Catches a
   friendship cooling off while its tier still says everything is fine: on a
-  239-person vault, 32 of the 48 flagged aren't overdue by their tier.
+  239-person vault, 21 of the 33 flagged aren't overdue by their tier.
+- Drift is a band rather than a threshold. Quiet for more than twice the usual gap
+  (never sooner than a fortnight, so a daily correspondent isn't flagged after three
+  quiet days), but not more than twelve times it (never sooner than three months).
+  The ceiling is there because intensity is often situational — an internship, a
+  course — and when that context ends contact stops rather than thins; without it,
+  three months of daily contact followed by six months of silence reads as "usually
+  every day, 180 days late", forever. 16 people on the author's vault sit past the
+  ceiling as ended situations rather than drifting relationships.
 - The rhythm window grows until it holds enough gaps *and* spans three weeks, so a
-  burst of daily mentions (a trip, a course) isn't mistaken for a daily rhythm and
-  produces no verdict at all. The drift threshold has a two-week floor, so a daily
-  correspondent isn't flagged after three quiet days.
+  burst of daily mentions isn't mistaken for a daily rhythm and produces no verdict.
 - A **Drifting** tab, a chip on the row, and the measured rhythm shown in the
   person panel next to the cadence you set.
+- **A contact calendar in the person panel**: a year of interactions, one cell per
+  day, with a count of anything older. No single number carries the shape of a
+  relationship — "daily for three months then nothing" and "every fortnight for
+  years, quiet lately" have the same rhythm figure and mean different things — and
+  the difference is obvious here. Clicking a filled day opens the note it came from.
 - **Reach-outs written into your daily note**, off by default. When a dated note
   for today is created, who's overdue goes in as unchecked tasks under a heading
   you choose. A link in an open task already doesn't count as contact, so the nudge
@@ -94,6 +105,8 @@ All notable changes to Personal CRM. Versions follow
 
 ### Performance
 
+- The contact calendar costs ~0.1 ms to compute and ~1.3 ms to insert its 371
+  cells, once, when a panel opens.
 - `toUTC` gained a fast path for canonical `YYYY-MM-DD` dates, skipping a regex on
   every date comparison in the plugin — and the rhythm calculation alone makes tens
   per person. Combined with converting each date once instead of twice, measuring a

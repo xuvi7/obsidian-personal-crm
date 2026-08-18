@@ -928,6 +928,15 @@ const MIN_SPAN_DAYS = 21;
 /** Ceiling on the walk, so a decade of daily contact stays cheap to measure. */
 const MAX_GAPS = 30;
 
+/** Quiet for longer than this much of their rhythm starts to look like drift. */
+const DRIFT_MIN_MULTIPLE = 2;
+/** …but never sooner than this, so a daily rhythm needs a fortnight of silence. */
+const DRIFT_MIN_DAYS = 14;
+/** Past this much, the pattern has ended rather than thinned. */
+const DRIFT_MAX_MULTIPLE = 12;
+/** …and never sooner than this, so a daily rhythm still gets three months of grace. */
+const DRIFT_MAX_DAYS = 90;
+
 /**
  * The median gap between recent interactions, in days.
  *
@@ -971,8 +980,19 @@ export function typicalGap(contactDates: string[]): number | null {
 /**
  * Whether the current silence is unusual *for this person*.
  *
- * The `+ 14` floor is what stops a daily correspondent being flagged after three
- * quiet days: doubling a one-day rhythm is not yet a drifting friendship.
+ * Drift is a band, not a threshold: quiet for longer than usual, but not so much
+ * longer that the pattern has plainly ended.
+ *
+ * The lower edge's `+ 14` floor stops a daily correspondent being flagged after
+ * three quiet days — doubling a one-day rhythm is not yet a drifting friendship.
+ *
+ * The upper edge exists because intensity is often situational: an internship, a
+ * course, a season of sitting next to someone. When that context ends the contact
+ * stops rather than thins, and measured without a ceiling, three months of daily
+ * contact followed by six months of silence reads as "usually every day, 180 days
+ * late" — forever. A silence of 180× the rhythm isn't a friendship you can catch by
+ * being reminded; it's one whose situation is over, and the cadence you assigned is
+ * the right tool for deciding whether to restart it. Drift is the recoverable middle.
  */
 function isDrifting(record: PersonRecord, today: string): boolean {
 	const rhythm = record.typicalGapDays;
@@ -981,7 +1001,10 @@ function isDrifting(record: PersonRecord, today: string): boolean {
 
 	const silence = diffDays(today, record.lastContact);
 	if (!Number.isFinite(silence) || silence <= 0) return false;
-	return silence > Math.max(rhythm * 2, rhythm + 14);
+
+	const floor = Math.max(rhythm * DRIFT_MIN_MULTIPLE, rhythm + DRIFT_MIN_DAYS);
+	const ceiling = Math.max(rhythm * DRIFT_MAX_MULTIPLE, rhythm + DRIFT_MAX_DAYS);
+	return silence > floor && silence <= ceiling;
 }
 
 function deriveStatus(
