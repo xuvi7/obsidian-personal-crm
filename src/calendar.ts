@@ -311,9 +311,17 @@ export function trailingMonths(
 	return out;
 }
 
-/** Shade level 0-4 for a count, GitHub-style. */
+/**
+ * Shade level 0-4 for a count.
+ *
+ * Square-rooted rather than linear. Counts are heavily skewed — one busy day can
+ * be ten times a typical one — and a linear scale against the maximum drops almost
+ * every real period onto level 1, which is the level closest to "empty". This gives
+ * the low counts, where nearly all the data lives, most of the range.
+ */
 export function shade(count: number, max: number): number {
 	if (count <= 0) return 0;
 	if (max <= 1) return 4;
-	return Math.min(4, Math.max(1, Math.ceil((count / max) * 4)));
+	const level = Math.ceil(Math.sqrt(count / max) * 4);
+	return Math.min(4, Math.max(1, level));
 }

@@ -25,7 +25,7 @@ import { WriteQueue } from "./writes";
 import { detectJournalSources, detectPeopleFolder } from "./detect";
 import { formatDuration, isISODate, todayISO } from "./dates";
 import type { LoopRef, PersonRecord } from "./types";
-import { appendFollowUp, appendUnder, completeTask, hasHeading } from "./loops";
+import { appendFollowUp, appendUnder, hasHeading, setTask } from "./loops";
 import {
 	asDisplay,
 	contactFields,
@@ -905,20 +905,23 @@ export default class PrmPlugin extends Plugin {
 	 * If neither still points at an open task the write is declined rather than
 	 * ticking off whatever moved into its place.
 	 */
-	async completeLoop(ref: LoopRef): Promise<boolean> {
+	async completeLoop(ref: LoopRef, done = true): Promise<boolean> {
 		const file = this.app.vault.getAbstractFileByPath(ref.path);
 		if (!(file instanceof TFile)) {
 			new Notice(`${ref.path} is gone.`);
 			return false;
 		}
 
-		let done = false;
-		const entry = await this.tracked(file, `Complete follow-up in ${file.basename}`, async () => {
+		let wrote = false;
+		const label = done
+			? `Complete follow-up in ${file.basename}`
+			: `Reopen follow-up in ${file.basename}`;
+		const entry = await this.tracked(file, label, async () => {
 			try {
 				await this.app.vault.process(file, (content) => {
-					const next = completeTask(content, ref);
+					const next = setTask(content, ref, done);
 					if (next === null) return content;
-					done = true;
+					wrote = true;
 					return next;
 				});
 			} catch (error) {
@@ -926,12 +929,12 @@ export default class PrmPlugin extends Plugin {
 			}
 		});
 
-		if (!done) {
+		if (!wrote) {
 			new Notice("That follow-up has already changed — reindexing.");
 			this.reindex();
 			return false;
 		}
-		this.afterWrite("Follow-up completed.", entry);
+		this.afterWrite(done ? "Follow-up completed." : "Follow-up reopened.", entry);
 		return true;
 	}
 

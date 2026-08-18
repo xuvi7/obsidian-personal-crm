@@ -51,6 +51,26 @@ All notable changes to Personal CRM. Versions follow
 
 ### Fixed
 
+- **Follow-ups can be un-ticked.** Completing one wrote `[x]` and disabled the
+  checkbox, and since the index drops a completed task there was no way back from a
+  mis-click. The checkbox now works both ways, a completed follow-up stays on screen
+  (struck through) while the panel is open, and reopening is its own undo entry.
+- **The person panel briefly showed people as unclassified.** Obsidian's metadata
+  cache updates asynchronously after a write, so the rebuild that follows one can
+  see a note without its frontmatter — and the panel only drew once, so it kept that
+  reading. It now redraws when the index settles.
+- **The follow-up checkbox sat below its text.** `align-items: baseline` on a
+  checkbox, which has no text baseline of its own.
+- **The calendar's shades were invisible.** Levels were the accent blended into the
+  border colour with `color-mix()`, so the low steps — where nearly all the data is:
+  201 of 362 filled days on a real vault — collapsed into looking empty, and vanished
+  entirely without `color-mix` support. Each level is now the accent at a fixed alpha
+  composited over the empty cell's colour, which moves away from empty in both light
+  and dark themes and needs no modern colour functions. Measured contrast against an
+  empty cell went from 1.09 to 1.53 at the lowest level, rising monotonically.
+- Shade levels are assigned on a square-root scale rather than linearly. Counts are
+  heavily skewed, and a linear scale against the maximum put day counts 1 through 5
+  all on level 1; they now spread 201/126/30/5 across the four levels.
 - The person panel's calendar was a full 53-column grid, which overflowed the modal,
   didn't line up with its edges, and pushed the note preview and notes box out of
   reach. Replaced with the thumbnail above; the panel is ~150px shorter.

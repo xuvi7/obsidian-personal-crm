@@ -13,7 +13,7 @@ import {
 } from "obsidian";
 import type PrmPlugin from "./main";
 import { tierById } from "./settings";
-import type { PersonRecord, Tier } from "./types";
+import type { LoopRef, PersonRecord, Tier } from "./types";
 import { addDays, formatDuration, isISODate, relativeToToday, todayISO } from "./dates";
 import { trailingMonths } from "./calendar";
 import { loopFile, readLoops } from "./loops";
@@ -862,6 +862,12 @@ export class PersonActionsModal extends Modal {
 	private busy = false;
 	private errorEl: HTMLElement | null = null;
 	private logButton: HTMLButtonElement | null = null;
+	/** Follow-ups ticked off while this panel has been open, kept so they stay
+	 *  on screen and can be un-ticked. The index drops them immediately. */
+	private completed: LoopRef[] = [];
+	/** Focus the notes box on the first render only, not on every refresh. */
+	private focused = false;
+	private unsubscribe: (() => void) | null = null;
 
 	constructor(
 		private plugin: PrmPlugin,
@@ -874,6 +880,12 @@ export class PersonActionsModal extends Modal {
 	onOpen(): void {
 		this.preview = new Component();
 		this.preview.load();
+
+		// Obsidian's metadata cache updates asynchronously after a write, so the
+		// rebuild that follows one can briefly see a note without its frontmatter —
+		// which rendered as "unclassified" here and stayed that way, because the
+		// panel only drew once. Redraw when the index settles.
+		this.unsubscribe = this.plugin.engine.onChange(() => this.render());
 		this.render();
 	}
 
@@ -962,7 +974,12 @@ export class PersonActionsModal extends Modal {
 			onChange: (v) => (this.note = v),
 			onSubmit: () => void this.logIt(),
 		});
-		window.setTimeout(() => noteField.focus(), 0);
+		// Only the first time: a redraw shouldn't yank the caret out of whatever the
+		// user is doing.
+		if (!this.focused) {
+			this.focused = true;
+			window.setTimeout(() => noteField.focus(), 0);
+		}
 
 		// Logging is the reason the panel is open; the rest are one click away.
 		const primary = contentEl.createDiv({ cls: "prm-reachout-actions" });
@@ -1085,7 +1102,9 @@ export class PersonActionsModal extends Modal {
 	}
 
 	private async fillLoops(list: HTMLElement, record: PersonRecord): Promise<void> {
-		const loops = await readLoops(this.app, record.openLoops);
+		// Anything ticked off while this panel has been open, so it stays on screen
+		// (struck through) instead of vanishing the moment it's completed.
+		const loops = await readLoops(this.app, [...record.openLoops, ...this.completed]);
 		// The panel may have been closed or re-rendered while reading.
 		if (!list.isConnected) return;
 		list.empty();
@@ -1100,13 +1119,26 @@ export class PersonActionsModal extends Modal {
 			const row = list.createDiv({ cls: "prm-loop" });
 			const box = row.createEl("input", {
 				cls: "prm-loop-check",
-				attr: { type: "checkbox", "aria-label": `Complete: ${loop.text}` },
+				attr: {
+					type: "checkbox",
+					"aria-label": loop.done ? `Reopen: ${loop.text}` : `Complete: ${loop.text}`,
+				},
 			});
+			box.checked = loop.done;
+			row.toggleClass("prm-loop-done", loop.done);
+			// Both directions. A completed task leaves the index, so this checkbox is
+			// the only handle left on it — disabling it would strand a mis-click.
 			box.onclick = () => {
+				const wanted = box.checked;
 				box.disabled = true;
-				void this.plugin.completeLoop(loop.ref).then((ok) => {
-					if (ok) row.addClass("prm-loop-done");
-					else box.disabled = false;
+				void this.plugin.completeLoop(loop.ref, wanted).then((ok) => {
+					box.disabled = false;
+					if (!ok) {
+						box.checked = !wanted;
+						return;
+					}
+					row.toggleClass("prm-loop-done", wanted);
+					if (wanted) this.completed.push(loop.ref);
 				});
 			};
 
@@ -1173,6 +1205,8 @@ export class PersonActionsModal extends Modal {
 	}
 
 	onClose(): void {
+		this.unsubscribe?.();
+		this.unsubscribe = null;
 		this.preview?.unload();
 		this.preview = null;
 		this.contentEl.empty();

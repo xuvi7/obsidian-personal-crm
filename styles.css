@@ -607,7 +607,9 @@ a.prm-place:hover {
 	border: none;
 	border-radius: 2px;
 	cursor: pointer;
-	background: var(--background-modifier-border);
+	/* The base every level's accent layer sits on. */
+	background-color: var(--background-modifier-border);
+	background-image: none;
 	box-shadow: none;
 }
 
@@ -619,34 +621,54 @@ a.prm-place:hover {
 	outline: 2px solid var(--text-accent);
 }
 
-/* Four steps rather than a gradient: a count you can read off the shade.
-   Each level declares a solid accent first and the blend second, so a renderer
-   without color-mix() shows a visible cell rather than an invisible grid. */
-.prm-cal-l0 { background: var(--background-modifier-border); }
+/*
+ * Four steps rather than a gradient: a count you can read off the shade.
+ *
+ * Each step is the theme's accent at a fixed alpha, composited over the empty
+ * cell's own colour — an accent layer on a grey base, in two background layers on
+ * one element. Three earlier attempts each failed a different way:
+ *
+ *   - color-mix() blends: invisible where the renderer lacks color-mix, and the
+ *     low steps collapse into the border colour when the accent sits near it.
+ *     The low steps are where nearly all the data is: on a real vault, 201 of 362
+ *     filled days land on level 1.
+ *   - scaling --accent-l: went *darker* than the empty cell on a dark theme,
+ *     inverting "more contact = brighter" (measured 1.09 contrast against empty).
+ *   - opacity on the cell: dims the hover outline and the selection ring with it.
+ *
+ * Compositing always moves away from the empty colour toward the accent, so it
+ * reads correctly in light and dark themes alike, and hsl() with slash-alpha needs
+ * no modern colour functions. The literals are Obsidian's default accent, for a
+ * theme that doesn't publish its accent components.
+ */
+.prm-calview,
+.prm-cal-legend {
+	--prm-accent: var(--accent-h, 254) var(--accent-s, 80%) var(--accent-l, 68%);
+}
+
+.prm-cal-l0 { background-color: var(--background-modifier-border); }
 
 .prm-cal-l1 {
-	background: var(--interactive-accent);
-	background: color-mix(in srgb, var(--interactive-accent) 30%, var(--background-modifier-border));
+	background-image: linear-gradient(hsl(var(--prm-accent) / 0.4), hsl(var(--prm-accent) / 0.4));
 }
 
 .prm-cal-l2 {
-	background: var(--interactive-accent);
-	background: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+	background-image: linear-gradient(hsl(var(--prm-accent) / 0.62), hsl(var(--prm-accent) / 0.62));
 }
 
 .prm-cal-l3 {
-	background: var(--interactive-accent);
-	background: color-mix(in srgb, var(--interactive-accent) 78%, var(--background-modifier-border));
+	background-image: linear-gradient(hsl(var(--prm-accent) / 0.82), hsl(var(--prm-accent) / 0.82));
 }
 
-.prm-cal-l4 { background: var(--interactive-accent); }
+.prm-cal-l4 { background-color: var(--interactive-accent); }
 
 /* After the levels on purpose: a future or missing period must not be shaded like
    a period that simply had no contact. */
 .prm-cal-hole,
 .prm-cal-future,
 .prm-cal-future.prm-cal-l0 {
-	background: transparent;
+	background-color: transparent;
+	background-image: none;
 	cursor: default;
 }
 
@@ -726,9 +748,11 @@ a.prm-place:hover {
 	margin: 0.3rem 0 0.5rem;
 }
 
+/* Centred, not baseline-aligned: a checkbox has no text baseline of its own, so
+   `baseline` dropped it below the words it belongs to. */
 .prm-loop {
 	display: flex;
-	align-items: baseline;
+	align-items: center;
 	gap: 0.45rem;
 	padding: 0.15rem 0;
 }
