@@ -46,6 +46,19 @@ export interface PrmSettings {
 	/** Heading new follow-ups are appended under in a person's note. */
 	followUpHeading: string;
 
+	/**
+	 * Count links to dated notes written in a person's own note as interactions.
+	 * Covers the log lines this plugin writes and sentences like "we talked on
+	 * [[2026-01-24]]" alike — both record that something happened that day.
+	 */
+	countPersonNoteDateLinks: boolean;
+	/**
+	 * Link a log line's date even when no note for that day exists. Keeps every
+	 * logged date readable from the metadata cache, at the cost of an unresolved
+	 * link in the vault.
+	 */
+	alwaysLinkLogDate: boolean;
+
 	/** Write today's reach-outs into a dated note when one is created. */
 	dailyNudge: boolean;
 	/** Heading the reach-out block is written under. */
@@ -109,6 +122,9 @@ export const DEFAULT_SETTINGS: PrmSettings = {
 
 	trackOpenLoops: true,
 	followUpHeading: "Follow-ups",
+
+	countPersonNoteDateLinks: true,
+	alwaysLinkLogDate: false,
 
 	dailyNudge: false,
 	dailyNudgeHeading: "Reach out",
@@ -668,6 +684,12 @@ export class PrmSettingTab extends PluginSettingTab {
 				},
 			},
 			{
+				name: "Dated links in a person's note count as contact",
+				desc: "A log line's [[2026-07-04]], and equally \u201cwe talked on [[2026-01-24]]\u201d — both say something happened that day. Set prm-ignore-journal on a person to opt them out.",
+				aliases: ["backlink", "date link", "log", "history"],
+				control: { type: "toggle", key: "countPersonNoteDateLinks" },
+			},
+			{
 				name: "Track follow-ups",
 				desc: "Counts unchecked tasks that concern someone — in their own note, or anywhere that links to them — as open follow-ups. Reads the metadata cache only, never file contents.",
 				aliases: ["loops", "tasks", "todo", "commitments"],
@@ -735,6 +757,14 @@ export class PrmSettingTab extends PluginSettingTab {
 				desc: "Writes the date as a wikilink when a note for that day exists, so each log line points at it.",
 				visible: () => this.plugin.settings.logToBody,
 				control: { type: "toggle", key: "linkDailyNoteInLog" },
+			},
+			{
+				name: "Link the date even with no note",
+				desc: "Otherwise a log made on a day you didn't journal writes a bare date, which nothing can read back later. Linking it keeps the date in the metadata cache — at the cost of an unresolved link in your vault.",
+				aliases: ["unresolved", "dead link", "history"],
+				visible: () =>
+					this.plugin.settings.logToBody && this.plugin.settings.linkDailyNoteInLog,
+				control: { type: "toggle", key: "alwaysLinkLogDate" },
 			},
 		];
 

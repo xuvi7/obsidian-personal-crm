@@ -423,7 +423,13 @@ export class PrmEngine {
 			const record = people.get(targetPath);
 			if (!record || record.ignoreJournal) continue;
 
-			if (!record.sources.has(date)) record.sources.set(date, file.path);
+			// First journal wins, but a journal always beats a date harvested from the
+			// person's own note: clicking the date should open the day, not the log
+			// line you clicked from.
+			const existing = record.sources.get(date);
+			if (existing === undefined || existing === record.path) {
+				record.sources.set(date, file.path);
+			}
 			added++;
 		}
 
@@ -557,7 +563,62 @@ export class PrmEngine {
 		const logged = coerceISODate(fm[K.lastContacted]);
 		if (logged) record.sources.set(logged, file.path);
 
+		// prm-last-contacted holds one date, so on its own it leaves no history.
+		if (this.settings.countPersonNoteDateLinks && !record.ignoreJournal) {
+			this.harvestDateLinks(file, cache, record);
+		}
+
 		return record;
+	}
+
+	/**
+	 * Interaction dates written in a person's own note as links to a dated note.
+	 *
+	 * A log line's `- [[2026-07-04]] — coffee` and a sentence like "a deep
+	 * conversation on [[2026-01-24]]" both record that something happened that day,
+	 * so both count. This is where a manually logged history comes from: the
+	 * frontmatter keeps only the latest date, while the links keep all of them.
+	 *
+	 * Read from `cache.links`, so it costs no file reads — and unresolved links are
+	 * in there too, which is what makes logs written on days with no note readable.
+	 */
+	private harvestDateLinks(
+		file: TFile,
+		cache: CachedMetadata | null,
+		record: PersonRecord,
+	): void {
+		const links = cache?.links;
+		if (!cache || !links || links.length === 0) return;
+
+		// The same positional rules as a journal: an open task or a quotation
+		// records an intention or someone else's words, not an interaction.
+		const excluded = this.settings.ignoreIntentLinks ? excludedRanges(cache) : [];
+		for (const link of links) {
+			const offset = link.position?.start?.offset;
+			if (excluded.length > 0 && typeof offset === "number" && inAnyRange(offset, excluded)) {
+				continue;
+			}
+			const date = this.dateOfLinkTarget(link.link);
+			if (date !== null && !record.sources.has(date)) record.sources.set(date, file.path);
+		}
+	}
+
+	/** The date a link target names, if it names one. */
+	private dateOfLinkTarget(target: string): string | null {
+		const linkpath = getLinkpath(target);
+		const basename = linkpath.slice(linkpath.lastIndexOf("/") + 1);
+		// No digits, no date — and most links in a person's note are to other people.
+		if (!/\d/.test(basename)) return null;
+
+		for (const source of this.settings.journalSources) {
+			const hit = parseJournalDate(basename, source.format, false);
+			if (hit !== null) return hit;
+		}
+		// No configured format matched. A bare ISO name is still unambiguous, so
+		// read it when the vault allows more than one convention.
+		return this.settings.allowFallbackDateFormats
+			? parseJournalDate(basename, undefined, true)
+			: null;
 	}
 
 	/**

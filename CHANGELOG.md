@@ -7,6 +7,19 @@ All notable changes to Personal CRM. Versions follow
 
 ### Added
 
+- **Dated links in a person's own note count as interactions.** Both the log lines
+  this plugin writes and a sentence like "a deep conversation on `[[2026-01-24]]`"
+  record that something happened that day. This is what gives a manually logged
+  history: `prm-last-contacted` holds only the latest date, while the links keep all
+  of them, so a rhythm can now be measured from manual logs alone. Read from the
+  metadata cache, so it costs no file reads. The journal's positional rules apply —
+  open tasks, quotations, code and embeds don't count — `prm-ignore-journal` opts a
+  person out, and there's a setting to turn it off entirely.
+- **Link the date even with no note** (off by default): a log made on a day you
+  didn't journal writes a bare date that nothing can read back later. Linking it
+  keeps the date in the metadata cache, at the cost of an unresolved link.
+- A date shared between a journal entry and a person's own log line still counts
+  once, and clicking it opens the journal rather than the log line.
 - **Drifting.** The plugin now measures how often you actually talk — the median
   gap between recent interactions — and flags someone when the current silence is
   long against *their own* rhythm rather than the cadence you assigned. Catches a

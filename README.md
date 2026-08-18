@@ -346,6 +346,18 @@ to you independently of this plugin.
 Effective last contact is the **most recent** of any dated-note mention and
 `prm-last-contacted`, so logging a text message works alongside journaling.
 
+A **link to a dated note written in a person's own note** counts as an interaction
+on that day too — both the log lines this plugin writes and a sentence like "a deep
+conversation on `[[2026-01-24]]`". That's where a manually logged history comes
+from: `prm-last-contacted` only ever holds the latest date, while the links keep
+all of them, so a rhythm can be measured from manual logs alone. The same
+positional rules as a journal apply — an open task or a quotation doesn't count —
+and `prm-ignore-journal` opts one person out.
+
+If you log contact on a day you didn't journal, there's no note to link and the
+date is written bare, which nothing can read back. **Link the date even with no
+note** keeps it readable, at the cost of an unresolved link in your vault.
+
 ### Known limits
 
 - `prm-*` values and tags are read from **frontmatter only**. Dataview inline

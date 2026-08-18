@@ -1203,7 +1203,12 @@ export default class PrmPlugin extends Plugin {
 		const note = this.engine.noteForDate(date);
 		// Keep the display text a date even when the note is named something else.
 		if (note) return `[[${note.basename}|${date}]]`;
-		return date;
+
+		// No note for that day. A bare date is tidier, but nothing can read it back
+		// — the metadata cache holds links, not prose — so the log entry becomes
+		// invisible to the interaction history. Linking anyway keeps it readable,
+		// and an unresolved link is still a link as far as the cache is concerned.
+		return this.settings.alwaysLinkLogDate ? `[[${date}]]` : date;
 	}
 
 	private afterWrite(
