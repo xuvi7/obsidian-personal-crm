@@ -3,7 +3,6 @@ import type PrmPlugin from "./main";
 import type { PersonRecord } from "./types";
 import { todayISO } from "./dates";
 import {
-	HEAT_COLORS,
 	buildCalendar,
 	shade,
 	type CalendarCell,
@@ -13,33 +12,6 @@ import {
 } from "./calendar";
 
 export const PRM_CALENDAR_VIEW_TYPE = "prm-calendar";
-
-/** An empty period's outline. Inline for the same reason as the fills. */
-const EMPTY_RING = "inset 0 0 0 1px rgba(140, 140, 140, 0.4)";
-
-/**
- * Set a cell's shade as custom properties, which the stylesheet reads.
- *
- * The value has to come from script — it depends on the count — but it can't come
- * from a plain class either: cells are `<button>`s, so they're focusable and
- * keyboard-operable, and Obsidian styles buttons through nested selectors that
- * outrank a plugin's single class. Both the fill *and* the hollow empty state were
- * losing to the app's own button background and shadow, which is why the grid came
- * out uniform while the legend's spans were correct. So the properties carry the
- * value and the stylesheet rule carries enough specificity to win.
- */
-function paintCell(el: HTMLElement, level: number, future: boolean): void {
-	if (future) {
-		el.setCssProps({ "--prm-cell-bg": "transparent", "--prm-cell-ring": "none" });
-		return;
-	}
-	if (level > 0) {
-		el.setCssProps({ "--prm-cell-bg": HEAT_COLORS[level], "--prm-cell-ring": "none" });
-		return;
-	}
-	// Empty: a hollow slot, so no fill however dark the busy end of the ramp gets.
-	el.setCssProps({ "--prm-cell-bg": "transparent", "--prm-cell-ring": EMPTY_RING });
-}
 
 const SCALES: { key: Granularity; label: string }[] = [
 	{ key: "day", label: "Daily" },
@@ -225,8 +197,7 @@ export class PrmCalendarView extends ItemView {
 		const legend = counts.createDiv({ cls: "prm-cal-legend" });
 		legend.createSpan({ cls: "prm-muted", text: "less" });
 		for (let level = 0; level <= 4; level++) {
-			const swatch = legend.createSpan({ cls: `prm-cal-cell prm-cal-l${level}` });
-			paintCell(swatch, level, false);
+			legend.createSpan({ cls: `prm-cal-cell prm-cal-l${level}` });
 		}
 		legend.createSpan({ cls: "prm-muted", text: "more" });
 		legend.setAttribute(
@@ -265,8 +236,9 @@ export class PrmCalendarView extends ItemView {
 
 	private renderCell(parent: HTMLElement, c: CalendarCell, grid: CalendarGrid): void {
 		const level = c.future ? 0 : shade(c.count, grid.max);
+		// The level class carries the shade; see styles.css for why that works here
+		// when a plain class doesn't win the cascade for the fill itself.
 		const el = parent.createEl("button", { cls: `prm-cal-cell prm-cal-l${level}` });
-		paintCell(el, level, c.future);
 		if (c.future) {
 			el.addClass("prm-cal-future");
 			el.disabled = true;

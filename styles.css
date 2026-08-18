@@ -650,15 +650,30 @@ a.prm-place:hover {
 }
 
 /*
- * A cell's fill and its empty-state outline, from properties set per cell in
- * calendar-view.ts. The values are in HEAT_COLORS; change them there to recolour.
+ * A cell's fill and its empty-state outline.
  *
- * The selectors are deliberately over-specific. Cells are <button>s — focusable and
- * keyboard-operable — and Obsidian styles buttons through nested selectors that
- * outrank a plugin's single class, so `.prm-cal-cell` alone lost to the app's own
- * button background and shadow: the grid rendered uniform while the legend's spans,
- * which no button rule touches, were correct the whole time. That mismatch is what
- * identified it.
+ * Two halves, and the split is the point:
+ *
+ *  1. The level classes only *set custom properties*. Nothing else in the cascade
+ *     sets `--prm-cell-bg`, so their specificity is irrelevant and they can stay
+ *     one class each.
+ *  2. One over-specific rule *consumes* them. That's the half that has to win: cells
+ *     are <button>s — focusable and keyboard-operable — and Obsidian's
+ *     `button:not(.clickable-icon)` (0,1,1) sets background-color and box-shadow,
+ *     which a single `.prm-cal-cell` (0,1,0) loses to. That mismatch is what
+ *     rendered a uniform, colourless grid while the legend's <span> swatches were
+ *     correct the whole time.
+ *
+ * The ramp is derived from the theme's accent, not hardcoded: darker means more, and
+ * mixing toward white at the light end and black at the dark end keeps the ramp
+ * perceptually the same direction in light and dark themes (mixing toward the
+ * *background* would invert on one of them).
+ *
+ * Each level declares a literal before the mix. That fallback works here where it
+ * wouldn't for a var(): an unsupported color-mix() is a *parse* error, which does
+ * fall back to the previous declaration — unlike a failed var() substitution, which
+ * is invalid at computed-value time and yields no colour at all. The literals are
+ * the GitHub-contributions green from heatmap-tracker (Apache 2.0).
  */
 .prm-calview .prm-cal-table .prm-cal-cell,
 .prm-calview .prm-cal-legend .prm-cal-cell {
@@ -666,12 +681,39 @@ a.prm-place:hover {
 	box-shadow: var(--prm-cell-ring, none);
 }
 
+/* Empty is a hollow slot, not a fill: with darker-meaning-more the busiest cells sit
+   close to a dark background, near enough to be mistaken for an empty one. */
+.prm-cal-l0 {
+	--prm-cell-bg: transparent;
+	--prm-cell-ring: inset 0 0 0 1px rgba(140, 140, 140, 0.4);
+}
+
+.prm-cal-l1 {
+	--prm-cell-bg: #c6e48b;
+	--prm-cell-bg: color-mix(in srgb, var(--interactive-accent, #7f6df2) 38%, #fff);
+}
+
+.prm-cal-l2 {
+	--prm-cell-bg: #7bc96f;
+	--prm-cell-bg: color-mix(in srgb, var(--interactive-accent, #7f6df2) 72%, #fff);
+}
+
+.prm-cal-l3 {
+	--prm-cell-bg: #49af5d;
+	--prm-cell-bg: var(--interactive-accent, #7f6df2);
+}
+
+.prm-cal-l4 {
+	--prm-cell-bg: #196127;
+	--prm-cell-bg: color-mix(in srgb, var(--interactive-accent, #7f6df2) 62%, #000);
+}
+
 /* A future or missing period isn't a period yet: no fill and not even the empty
-   slot's outline. Same specificity as the rule above, for the same reason. */
-.prm-calview .prm-cal-table .prm-cal-hole,
-.prm-calview .prm-cal-table .prm-cal-future {
-	background-color: transparent;
-	box-shadow: none;
+   slot's outline. Properties again, so no specificity is needed. */
+.prm-cal-hole,
+.prm-cal-future {
+	--prm-cell-bg: transparent;
+	--prm-cell-ring: none;
 	cursor: default;
 }
 

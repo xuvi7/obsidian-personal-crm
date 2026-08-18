@@ -221,18 +221,10 @@ header, or the `Open contact calendar` command — with four scales:
 
 Cells are shaded by how many interactions fall in the period — **darker means
 more** — with a key in the header, and an empty period is drawn as a hollow slot
-rather than a fill, so a busy period can't be mistaken for an empty one. The four
-shades are literal colours rather than anything derived from your theme: a `var()`
-that fails to substitute is invalid *at computed-value time*, which does not fall
-back to an earlier declaration, and an unset `background-color` is transparent — so
-every theme-derived version of this had a failure mode that ended in no colour at
-all. The ramp is the GitHub-contributions green, borrowed from
-[heatmap-tracker](https://github.com/mokkiebear/heatmap-tracker) (Apache 2.0), which
-arrives at literal palettes for the same reason. Override `.prm-cal-l1` through
-`.prm-cal-l4` in a CSS snippet to recolour them. Click one to see who, and click a name to open their note. Click the same
-period again to dismiss the detail. Year rows are contiguous even when a year is
-empty — a calendar that silently skips time isn't a calendar — and anything older
-than the range is reported as a count rather than quietly dropped.
+rather than a fill, so a busy period can't be mistaken for an empty one. The shades
+are derived from **your theme's accent colour**, mixed toward white at the light end
+and black at the dark end so the ramp reads the same direction in light and dark
+themes. Override `.prm-cal-l1`–`.prm-cal-l4` in a CSS snippet to recolour them.
 
 **One person…** narrows the whole view to a single history, which is what makes a
 drift verdict checkable: a dense block followed by empty weeks is a context that

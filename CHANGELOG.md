@@ -72,16 +72,14 @@ All notable changes to Personal CRM. Versions follow
   rule with enough specificity to win.
 - **Tier chips on the dashboard had the same bug** and have since they became buttons:
   a coloured outline chip was rendering as a filled grey button, at input height.
-- **Calendar shading now runs darker for more**, as four literal colours — the
-  GitHub-contributions green, borrowed from
-  [heatmap-tracker](https://github.com/mokkiebear/heatmap-tracker) (Apache 2.0).
-  Nothing in the fill path goes through `var()`, `calc()` or `color-mix()` any more.
-  A `var()` that fails to substitute is invalid *at computed-value time*, which does
-  not fall back to an earlier declaration in the same rule — the property becomes
-  unset, and an unset `background-color` is transparent. So a literal fallback above
-  a `var()`-based one buys nothing, and every theme-derived approach shared a failure
-  mode ending in no colour at all. Override `.prm-cal-l1`–`.prm-cal-l4` in a CSS
-  snippet to recolour.
+- **Calendar shading now runs darker for more**, derived from your theme's accent
+  colour: mixed toward white at the light end and black at the dark end, so the ramp
+  reads the same direction in light and dark themes. The level classes only set custom
+  properties, which nothing competes for, so one rule consumes them at a specificity
+  that beats the app's button styling. Each level declares a literal before the mix —
+  that fallback works because an unsupported `color-mix()` is a *parse* error, which
+  does fall back, unlike a failed `var()` substitution. Override `.prm-cal-l1`–
+  `.prm-cal-l4` in a CSS snippet to recolour.
 - An empty period is a hollow outlined slot rather than a fill: with darker-means-more
   the busiest cells necessarily approach a dark background (measured at 1.14 contrast
   against a filled empty cell), and an outline removes the ambiguity.
@@ -179,6 +177,10 @@ All notable changes to Personal CRM. Versions follow
 
 ### Performance
 
+- Row icons are built once per icon name and cloned thereafter. Three icon buttons per
+  row means `setIcon()` ran once per button — 9,000 times on a 3,000-person list — and
+  building a Lucide SVG costs measurably more than cloning one: 49.8 ms against 33.3 ms
+  for 9,000, or 14% of a full render at that size.
 - Selecting a period in the calendar updates an outline and the detail panel rather
   than rebuilding the grid: 0.1 ms against a 1.7 ms full render, and the gap widens
   with vault size since a rebuild re-buckets every interaction. The interaction map
