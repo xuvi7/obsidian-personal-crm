@@ -78,6 +78,17 @@ export interface PersonRecord {
 	baselineSource: BaselineSource;
 	/** Days until next birthday, null when no birthday recorded. */
 	daysUntilBirthday: number | null;
+	/**
+	 * How often you actually talk, as the median gap over their recent history.
+	 * Null until there are enough interactions for a median to mean anything.
+	 */
+	typicalGapDays: number | null;
+	/**
+	 * True when the current silence is long compared to *their own* rhythm, rather
+	 * than to the cadence you assigned. Catches a friendship cooling off while its
+	 * tier still says everything is fine.
+	 */
+	drifting: boolean;
 	/** Unfinished commitments involving them, in vault order. */
 	openLoops: LoopRef[];
 }

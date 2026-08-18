@@ -910,12 +910,20 @@ export class PersonActionsModal extends Modal {
 				text: `snoozed to ${record.snoozeUntil}`,
 			});
 		}
+		if (record.drifting) {
+			nameRow.createSpan({ cls: "prm-chip prm-chip-drift", text: "drifting" });
+		}
 		for (const tag of record.tags) {
 			nameRow.createSpan({ cls: "prm-chip prm-chip-muted", text: `#${tag}` });
 		}
 
 		const meta = header.createDiv({ cls: "prm-reachout-meta" });
 		meta.createSpan({ text: lastContactLabel(record) });
+		// Their actual rhythm, which is the thing the "drifting" chip is measured
+		// against — and often disagrees with the cadence you assigned.
+		if (record.typicalGapDays !== null) {
+			meta.createSpan({ text: `usually every ${formatDuration(record.typicalGapDays)}` });
+		}
 		if (record.mentionCount > 0) {
 			meta.createSpan({ text: `${record.mentionCount} mentions` });
 		}

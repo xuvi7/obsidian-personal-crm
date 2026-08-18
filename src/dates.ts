@@ -34,9 +34,27 @@ export function isISODate(value: string): boolean {
  * across DST boundaries.
  */
 function toUTC(iso: string): number | null {
+	// Fast path for the canonical form, which is what the index deals in. The regex
+	// below is correct but runs on every date comparison in the plugin, and the
+	// rhythm calculation alone makes tens of them per person.
+	if (iso.length === 10 && iso.charCodeAt(4) === 45 && iso.charCodeAt(7) === 45) {
+		const y = Number(iso.slice(0, 4));
+		const m = Number(iso.slice(5, 7));
+		const d = Number(iso.slice(8, 10));
+		if (Number.isInteger(y) && Number.isInteger(m) && Number.isInteger(d)) {
+			return Date.UTC(y, m - 1, d);
+		}
+	}
+
 	const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(iso);
 	if (!m) return null;
 	return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
+/** Whole days since the epoch, or null when unparseable. */
+export function dayNumber(iso: string): number | null {
+	const u = toUTC(iso);
+	return u === null ? null : Math.round(u / MS_PER_DAY);
 }
 
 function fromUTC(ms: number): string {

@@ -437,6 +437,10 @@ a.prm-place:hover {
 
 /* ------------------------------------------------------------------ follow-ups */
 
+.prm-chip-drift {
+	--prm-chip-color: var(--text-warning);
+}
+
 .prm-chip-loop {
 	--prm-chip-color: var(--text-accent);
 }

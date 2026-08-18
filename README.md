@@ -167,6 +167,30 @@ With a selection, a bar appears above the list: **Log contact** (one date and
 note applied to everyone), **Set cadence**, **Add tag**, **Remove tag** and
 **Snooze**. Each is a single undo step, not one per person.
 
+### Drifting
+
+A cadence you assigned can be wrong. Someone filed as *Casual* whom you actually
+spoke to every week is fine by their tier and not fine in reality, and the tier
+will never say so.
+
+So the plugin also measures the rhythm you actually have — the median gap between
+recent interactions — and flags **drifting** when the current silence is long
+against *that*, not against the cadence. The window grows from the most recent
+interaction until it holds enough gaps and covers at least three weeks, which
+keeps it short for people you see often and long for people you don't. A median,
+so one long silence in an otherwise weekly friendship doesn't redefine it.
+
+Two things this deliberately doesn't do. A week of daily mentions — a trip, a
+course, a stretch of sitting next to someone — isn't a one-day rhythm, so a burst
+that doesn't span real time produces no verdict at all. And doubling a short
+rhythm isn't enough on its own: the threshold has a two-week floor, so a daily
+correspondent isn't flagged after three quiet days.
+
+On the author's vault, 102 of 239 people have enough history for a rhythm, 48 read
+as drifting, and **32 of those aren't overdue by their tier** — which is the point.
+The person panel shows the measured rhythm ("usually every 2w") next to the cadence
+you set, so a disagreement between the two is visible.
+
 ### Reach-outs in your daily note
 
 Having to remember to open a dashboard is the same failure as forgetting. Turn on

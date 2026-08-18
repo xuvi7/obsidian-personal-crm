@@ -16,13 +16,14 @@ import { normalizeName } from "./contacts";
 
 export const PRM_VIEW_TYPE = "prm-dashboard";
 
-type FilterKey = "due" | "all" | "loops" | "unclassified" | "birthdays" | "paused";
+type FilterKey = "due" | "all" | "loops" | "drifting" | "unclassified" | "birthdays" | "paused";
 type SortKey = "urgency" | "name" | "last-contact" | "cadence" | "tags";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
 	{ key: "due", label: "Due" },
 	{ key: "all", label: "Tracked" },
 	{ key: "loops", label: "Follow-ups" },
+	{ key: "drifting", label: "Drifting" },
 	{ key: "unclassified", label: "Unclassified" },
 	{ key: "birthdays", label: "Birthdays" },
 	{ key: "paused", label: "Paused" },
@@ -356,7 +357,7 @@ export class PrmDashboardView extends ItemView {
 
 		const search = controls.createEl("input", {
 			cls: "prm-search",
-			attr: { type: "search", placeholder: "Filter by name, #tag or @place…" },
+			attr: { type: "search", placeholder: "Name, #tag or @place…" },
 		});
 		search.value = this.query;
 		// Filtering hides already-built rows rather than rebuilding them, so typing
@@ -485,6 +486,13 @@ export class PrmDashboardView extends ItemView {
 					} still unclassified. Run Triage to work through them.`,
 				});
 				break;
+			case "drifting":
+				empty.createEl("p", { text: "Nobody is drifting." });
+				empty.createEl("p", {
+					cls: "prm-muted",
+					text: "This compares the current silence to how often you two normally talk, so it needs a few interactions on record before it can say anything.",
+				});
+				break;
 			case "loops":
 				empty.createEl("p", { text: "No open follow-ups." });
 				empty.createEl("p", {
@@ -609,6 +617,16 @@ export class PrmDashboardView extends ItemView {
 				cls: "prm-chip prm-chip-muted",
 				text: `snoozed to ${record.snoozeUntil}`,
 			});
+		}
+
+		if (record.drifting) {
+			const chip = nameRow.createSpan({ cls: "prm-chip prm-chip-drift", text: "drifting" });
+			chip.setAttribute(
+				"aria-label",
+				record.typicalGapDays === null
+					? "Quieter than usual"
+					: `You normally talk every ${formatDuration(record.typicalGapDays)}`,
+			);
 		}
 
 		if (record.openLoops.length > 0) {
@@ -800,6 +818,8 @@ export class PrmDashboardView extends ItemView {
 					return r.status !== "untracked" && r.status !== "paused";
 				case "loops":
 					return r.openLoops.length > 0;
+				case "drifting":
+					return r.drifting;
 				case "unclassified":
 					return r.status === "untracked";
 				case "birthdays":

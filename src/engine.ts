@@ -17,6 +17,7 @@ import type {
 import {
 	addDays,
 	coerceISODate,
+	dayNumber,
 	daysUntilAnniversary,
 	diffDays,
 	isISODate,
@@ -548,6 +549,8 @@ export class PrmEngine {
 			status: "untracked",
 			baselineSource,
 			daysUntilBirthday: null,
+			typicalGapDays: null,
+			drifting: false,
 			openLoops: [],
 		};
 
@@ -629,6 +632,9 @@ export class PrmEngine {
 		if (record.birthday) {
 			record.daysUntilBirthday = daysUntilAnniversary(record.birthday, today);
 		}
+
+		record.typicalGapDays = typicalGap(record.contactDates);
+		record.drifting = isDrifting(record, today);
 
 		const tier = tierById(this.settings, record.tierId);
 		record.tierMissing = record.tierId !== null && tier === null;
@@ -843,6 +849,78 @@ function inAnyRange(offset: number, ranges: Range[]): boolean {
 		if (offset <= range.end) return true;
 	}
 	return false;
+}
+
+/** A rhythm needs at least this many gaps before a median says anything. */
+const MIN_GAPS = 3;
+
+/**
+ * How much time the measured gaps must cover.
+ *
+ * Without this, a week of daily journal mentions — a trip, a course, a stretch of
+ * sitting next to someone — reads as a "one-day rhythm", and then any normal
+ * silence looks like a collapse. Three weeks is enough to tell a rhythm from a
+ * burst.
+ */
+const MIN_SPAN_DAYS = 21;
+
+/** Ceiling on the walk, so a decade of daily contact stays cheap to measure. */
+const MAX_GAPS = 30;
+
+/**
+ * The median gap between recent interactions, in days.
+ *
+ * The window grows from the most recent interaction until it holds enough gaps
+ * *and* covers enough time, which keeps it short for people you see often and
+ * long for people you don't — rather than a fixed count that means something
+ * different for each. A median rather than a mean, so one three-year silence in
+ * an otherwise weekly friendship doesn't redefine the friendship.
+ */
+export function typicalGap(contactDates: string[]): number | null {
+	if (contactDates.length < MIN_GAPS + 1) return null;
+
+	// contactDates is newest-first, so consecutive pairs are the recent gaps. Each
+	// date is converted once and reused as the next pair's other end, rather than
+	// being parsed again by a second diffDays call.
+	const gaps: number[] = [];
+	let span = 0;
+	let previous = dayNumber(contactDates[0]);
+	for (let i = 1; i < contactDates.length && gaps.length < MAX_GAPS; i++) {
+		const current = dayNumber(contactDates[i]);
+		if (current === null) continue;
+		if (previous !== null) {
+			const gap = previous - current;
+			if (gap > 0) {
+				gaps.push(gap);
+				span += gap;
+			}
+		}
+		previous = current;
+		if (gaps.length >= MIN_GAPS && span >= MIN_SPAN_DAYS) break;
+	}
+	if (gaps.length < MIN_GAPS || span < MIN_SPAN_DAYS) return null;
+
+	gaps.sort((a, b) => a - b);
+	const mid = Math.floor(gaps.length / 2);
+	const median =
+		gaps.length % 2 === 0 ? Math.round((gaps[mid - 1] + gaps[mid]) / 2) : gaps[mid];
+	return median > 0 ? median : null;
+}
+
+/**
+ * Whether the current silence is unusual *for this person*.
+ *
+ * The `+ 14` floor is what stops a daily correspondent being flagged after three
+ * quiet days: doubling a one-day rhythm is not yet a drifting friendship.
+ */
+function isDrifting(record: PersonRecord, today: string): boolean {
+	const rhythm = record.typicalGapDays;
+	if (rhythm === null || record.lastContact === null) return false;
+	if (record.paused) return false;
+
+	const silence = diffDays(today, record.lastContact);
+	if (!Number.isFinite(silence) || silence <= 0) return false;
+	return silence > Math.max(rhythm * 2, rhythm + 14);
 }
 
 function deriveStatus(

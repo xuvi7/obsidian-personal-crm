@@ -7,6 +7,17 @@ All notable changes to Personal CRM. Versions follow
 
 ### Added
 
+- **Drifting.** The plugin now measures how often you actually talk — the median
+  gap between recent interactions — and flags someone when the current silence is
+  long against *their own* rhythm rather than the cadence you assigned. Catches a
+  friendship cooling off while its tier still says everything is fine: on a
+  239-person vault, 32 of the 48 flagged aren't overdue by their tier.
+- The rhythm window grows until it holds enough gaps *and* spans three weeks, so a
+  burst of daily mentions (a trip, a course) isn't mistaken for a daily rhythm and
+  produces no verdict at all. The drift threshold has a two-week floor, so a daily
+  correspondent isn't flagged after three quiet days.
+- A **Drifting** tab, a chip on the row, and the measured rhythm shown in the
+  person panel next to the cadence you set.
 - **Reach-outs written into your daily note**, off by default. When a dated note
   for today is created, who's overdue goes in as unchecked tasks under a heading
   you choose. A link in an open task already doesn't count as contact, so the nudge
@@ -70,6 +81,11 @@ All notable changes to Personal CRM. Versions follow
 
 ### Performance
 
+- `toUTC` gained a fast path for canonical `YYYY-MM-DD` dates, skipping a regex on
+  every date comparison in the plugin — and the rhythm calculation alone makes tens
+  per person. Combined with converting each date once instead of twice, measuring a
+  rhythm went from 3.5 µs to ~2 µs per person, flat from 10 interactions to 5,000
+  because the walk is capped.
 - Nothing is written, and no dated-note check runs, until the workspace is ready.
   Obsidian replays `create` for every file in the vault while it loads.
 - With all three features on, a rebuild is ~3.1 ms on a 2,372-file vault against a
