@@ -112,6 +112,20 @@ export class PrmEngine {
 		return candidates.find((f) => f.basename === date) ?? candidates[0];
 	}
 
+	/**
+	 * The date a note represents, if it's in a journal source at all.
+	 *
+	 * Public because writing into today's note needs the same date reading the index
+	 * does — two answers to "is this today's journal?" would drift apart.
+	 */
+	dateOfJournalNote(file: TFile): string | null {
+		const inJournal = this.settings.journalSources.some(
+			(s) => s.folder.length > 0 && isInFolder(file.path, s.folder),
+		);
+		if (!inJournal) return null;
+		return this.dateForNote(file, this.app.metadataCache.getFileCache(file));
+	}
+
 	/** True when a note titled exactly `date` exists — safe to link as [[date]]. */
 	hasNoteTitledDate(date: string): boolean {
 		return (this.notesByDate.get(date) ?? []).some((f) => f.basename === date);
@@ -144,6 +158,11 @@ export class PrmEngine {
 		// file's cache in hand; resolving them to people needs the finished index.
 		const taskFiles: TaskFile[] = [];
 		const trackLoops = this.settings.trackOpenLoops;
+		// Only while the nudge is on: turn it off and the blocks it already wrote
+		// become ordinary follow-ups, which is what they then are.
+		const nudgeHeading = this.settings.dailyNudge
+			? this.settings.dailyNudgeHeading.trim().toLowerCase() || null
+			: null;
 
 		// One pass, classifying each file once.
 		for (const file of files) {
@@ -161,7 +180,7 @@ export class PrmEngine {
 			}
 
 			if (trackLoops && cache?.listItems && cache.listItems.length > 0) {
-				const tasks = openTasks(cache);
+				const tasks = openTasks(cache, nudgeHeading);
 				if (tasks.length > 0) taskFiles.push({ file, cache, tasks });
 			}
 		}
@@ -742,16 +761,45 @@ interface TaskFile {
  * The same `task === " "` test excludedRanges uses to *ignore* these when
  * counting contact: an open task records an intention, which is exactly what
  * makes it an open loop.
+ *
+ * `skipHeading` drops the section the daily reach-out block is written under.
+ * Those lines are generated from who's already overdue, so counting them as
+ * follow-ups would restate the Due tab and pile up a fresh copy every day.
  */
-function openTasks(cache: CachedMetadata): OpenTask[] {
+function openTasks(cache: CachedMetadata, skipHeading: string | null): OpenTask[] {
+	const skip = skipHeading === null ? [] : headingSections(cache, skipHeading);
 	const out: OpenTask[] = [];
 	for (const item of cache.listItems ?? []) {
 		if (item.task !== " ") continue;
+		const start = item.position.start.offset;
+		if (skip.length > 0 && inAnyRange(start, skip)) continue;
 		out.push({
-			start: item.position.start.offset,
+			start,
 			end: item.position.end.offset,
 			line: item.position.start.line,
 		});
+	}
+	return out;
+}
+
+/**
+ * Spans covering every section named `heading`, from the heading to the next
+ * heading of any level.
+ */
+function headingSections(cache: CachedMetadata, heading: string): Range[] {
+	const headings = cache.headings;
+	if (!headings || headings.length === 0) return [];
+
+	// `heading` arrives trimmed and lowercased. Most headings can't match, so rule
+	// them out on length before allocating a lowercased copy of each one.
+	const out: Range[] = [];
+	for (let i = 0; i < headings.length; i++) {
+		const raw = headings[i].heading;
+		if (raw.length < heading.length) continue;
+		if (raw.trim().toLowerCase() !== heading) continue;
+		const start = headings[i].position.start.offset;
+		const end = headings[i + 1]?.position.start.offset ?? Number.MAX_SAFE_INTEGER;
+		out.push({ start, end });
 	}
 	return out;
 }

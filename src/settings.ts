@@ -46,6 +46,13 @@ export interface PrmSettings {
 	/** Heading new follow-ups are appended under in a person's note. */
 	followUpHeading: string;
 
+	/** Write today's reach-outs into a dated note when one is created. */
+	dailyNudge: boolean;
+	/** Heading the reach-out block is written under. */
+	dailyNudgeHeading: string;
+	/** Most people to list in the block. */
+	dailyNudgeLimit: number;
+
 	/** Folder new person notes are created in. Empty = the first people folder. */
 	newPersonFolder: string;
 	/** Note used as the template for new people. Empty = a plain built-in note. */
@@ -102,6 +109,10 @@ export const DEFAULT_SETTINGS: PrmSettings = {
 
 	trackOpenLoops: true,
 	followUpHeading: "Follow-ups",
+
+	dailyNudge: false,
+	dailyNudgeHeading: "Reach out",
+	dailyNudgeLimit: 5,
 
 	newPersonFolder: "",
 	newPersonTemplate: "",
@@ -672,6 +683,35 @@ export class PrmSettingTab extends PluginSettingTab {
 					placeholder: "Follow-ups",
 					validate: (value: string) =>
 						value.trim().length === 0 ? "Enter a heading." : undefined,
+				},
+			},
+			{
+				name: "Add reach-outs to a new dated note",
+				desc: "When a note for today is created, write who's overdue into it as unchecked tasks. Ticking one off counts as contact — and until then it can't, since a link in an open task records an intention, not a conversation.",
+				aliases: ["daily", "nudge", "journal", "reminder"],
+				control: { type: "toggle", key: "dailyNudge" },
+			},
+			{
+				name: "Reach-out heading",
+				visible: () => this.plugin.settings.dailyNudge,
+				control: {
+					type: "text",
+					key: "dailyNudgeHeading",
+					placeholder: "Reach out",
+					validate: (value: string) =>
+						value.trim().length === 0 ? "Enter a heading." : undefined,
+				},
+			},
+			{
+				name: "How many to list",
+				visible: () => this.plugin.settings.dailyNudge,
+				control: {
+					type: "slider",
+					key: "dailyNudgeLimit",
+					min: 1,
+					max: 20,
+					step: 1,
+					displayFormat: (v: number) => `${v} people`,
 				},
 			},
 			{

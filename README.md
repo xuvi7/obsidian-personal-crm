@@ -167,6 +167,34 @@ With a selection, a bar appears above the list: **Log contact** (one date and
 note applied to everyone), **Set cadence**, **Add tag**, **Remove tag** and
 **Snooze**. Each is a single undo step, not one per person.
 
+### Reach-outs in your daily note
+
+Having to remember to open a dashboard is the same failure as forgetting. Turn on
+**Add reach-outs to a new dated note** and a block goes into today's journal when
+it's created:
+
+```markdown
+## Reach out
+- [ ] [[Sam Rivera]] — overdue 6w
+- [ ] [[Ana Diaz]] — overdue 5w
+```
+
+Unchecked tasks on purpose, and this is where the three features meet. A link
+inside an open task is already excluded from counting as contact, so being listed
+can't silence the reminder that produced the listing. Tick the box and it becomes
+a *completed* task — which does count. **So the gesture that means "done" is the
+one that logs it**, with no second step.
+
+Tasks under that heading are left out of the Follow-ups tab: they're generated from
+who's already overdue, so counting them would restate the Due tab and pile up a
+fresh copy every day. Turn the nudge off and blocks it already wrote become
+ordinary follow-ups, which is then what they are.
+
+Only a dated note for *today* gets one automatically — an older note arriving by
+sync shouldn't be told who's overdue now — and nothing is written while Obsidian
+is still loading. `Add today's reach-outs to this note` does it on demand for any
+note, and running it twice won't stack a second block.
+
 ### Places
 
 Distance is what breaks contact, so the plugin tracks where people are. Set it

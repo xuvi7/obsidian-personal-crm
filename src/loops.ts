@@ -144,7 +144,11 @@ export function completeTask(content: string, ref: LoopRef): string | null {
  * if it isn't there. Returns the new content.
  */
 export function appendFollowUp(content: string, heading: string, text: string): string {
-	const task = `- [ ] ${text.trim()}`;
+	return appendLine(content, heading, `- [ ] ${text.trim()}`);
+}
+
+/** Put one literal line at the end of `heading`'s section. */
+function appendLine(content: string, heading: string, task: string): string {
 	const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	const headingRe = new RegExp(`^(#{1,6})\\s+${escaped}\\s*$`, "im");
 	const match = headingRe.exec(content);
@@ -175,6 +179,27 @@ function shallowestHeading(content: string): number {
 	while ((m = re.exec(content)) !== null) found = Math.min(found, m[1].length);
 	if (found <= 6) level = found;
 	return level;
+}
+
+/**
+ * Whether a note already has a section under `heading`.
+ *
+ * Used to avoid writing the reach-out block twice into the same note.
+ */
+export function hasHeading(content: string, heading: string): boolean {
+	const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return new RegExp(`^#{1,6}\\s+${escaped}\\s*$`, "im").test(content);
+}
+
+/**
+ * Append a block of lines under `heading`, creating the heading if absent.
+ *
+ * Shares appendFollowUp's placement rules so both write the same shape.
+ */
+export function appendUnder(content: string, heading: string, lines: string[]): string {
+	let out = content;
+	for (const line of lines) out = appendLine(out, heading, line);
+	return out;
 }
 
 export function loopFile(app: App, ref: LoopRef): TFile | null {

@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, debounce, setIcon } from "obsidian";
+import { Notice, Plugin, TAbstractFile, TFile, debounce, setIcon } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
 	FRONTMATTER_KEYS,
@@ -24,7 +24,7 @@ import { WriteQueue } from "./writes";
 import { detectJournalSources, detectPeopleFolder } from "./detect";
 import { formatDuration, isISODate, todayISO } from "./dates";
 import type { LoopRef, PersonRecord } from "./types";
-import { appendFollowUp, completeTask } from "./loops";
+import { appendFollowUp, appendUnder, completeTask, hasHeading } from "./loops";
 import {
 	asDisplay,
 	contactFields,
@@ -62,6 +62,12 @@ export default class PrmPlugin extends Plugin {
 	private statusBarEl: HTMLElement | null = null;
 	private statusTextEl: HTMLElement | null = null;
 	private firstBuildDone = false;
+	/**
+	 * False until the workspace is ready. Obsidian replays `create` for every file
+	 * in the vault while it loads, and writing into notes during that is both
+	 * wasted work and a surprising edit nobody asked for.
+	 */
+	private ready = false;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -91,6 +97,11 @@ export default class PrmPlugin extends Plugin {
 		);
 		this.registerEvent(this.app.vault.on("delete", rebuild));
 		this.registerEvent(
+			this.app.vault.on("create", (file) => {
+				void this.nudgeIfTodaysNote(file);
+			}),
+		);
+		this.registerEvent(
 			this.app.vault.on("rename", (file, oldPath) => {
 				// Snapshots key on path, so without this an undo becomes impossible
 				// the moment a note is renamed.
@@ -100,6 +111,7 @@ export default class PrmPlugin extends Plugin {
 		);
 
 		this.app.workspace.onLayoutReady(() => {
+			this.ready = true;
 			void this.firstRunSetup();
 			// Keep the first build off Obsidian's startup frame. `resolved` usually
 			// beats this; whichever lands first wins and the other is a no-op.
@@ -340,6 +352,17 @@ export default class PrmPlugin extends Plugin {
 				new PersonPickerModal(this, this.engine.all(), (record) => {
 					void this.openPerson(record);
 				}).open();
+			},
+		});
+
+		this.addCommand({
+			id: "add-nudge",
+			name: "Add today's reach-outs to this note",
+			checkCallback: (checking: boolean) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file) return false;
+				if (!checking) void this.addNudge(file);
+				return true;
 			},
 		});
 
@@ -779,6 +802,67 @@ export default class PrmPlugin extends Plugin {
 				else fm[key] = clean;
 			});
 		});
+	}
+
+	/**
+	 * Write today's reach-outs into a dated note.
+	 *
+	 * As unchecked tasks on purpose. A link inside an open task is already excluded
+	 * from counting as contact, so a nudge can't silence the reminder that produced
+	 * it — and ticking the box makes it a completed task, which *does* count. So the
+	 * gesture that means "done" is also the one that logs it.
+	 */
+	async addNudge(file: TFile, opts: { silent?: boolean } = {}): Promise<boolean> {
+		const heading = this.settings.dailyNudgeHeading.trim() || "Reach out";
+		const queue = this.engine.queue(Math.max(1, this.settings.dailyNudgeLimit));
+		if (queue.length === 0) {
+			if (!opts.silent) new Notice("Nobody is overdue.");
+			return false;
+		}
+
+		let wrote = false;
+		const lines = queue.map((record) => {
+			const overdue =
+				record.overdueDays > 0 ? ` — overdue ${formatDuration(record.overdueDays)}` : "";
+			return `- [ ] [[${record.name}]]${overdue}`;
+		});
+
+		const entry = await this.tracked(file, `Add reach-outs to ${file.basename}`, async () => {
+			try {
+				await this.app.vault.process(file, (content) => {
+					// Written once per note: re-running shouldn't stack a second block,
+					// and the user may have ticked or deleted lines from the first.
+					if (hasHeading(content, heading)) return content;
+					wrote = true;
+					return appendUnder(content, heading, lines);
+				});
+			} catch (error) {
+				this.reportWriteError(file, error);
+			}
+		});
+
+		if (!wrote) {
+			if (!opts.silent) new Notice(`${file.basename} already has a "${heading}" section.`);
+			return false;
+		}
+		this.afterWrite(
+			`Added ${describeCount(queue.length, "person", "people")} to ${file.basename}.`,
+			entry,
+			opts,
+		);
+		return true;
+	}
+
+	/**
+	 * Called when a note appears. Only a dated note for *today* gets a block: an
+	 * older note being created (an import, a sync) shouldn't be told who's overdue
+	 * now, and a future note's list would be wrong by the time it arrives.
+	 */
+	private async nudgeIfTodaysNote(file: TAbstractFile): Promise<void> {
+		if (!this.ready || !this.settings.dailyNudge) return;
+		if (!(file instanceof TFile) || file.extension !== "md") return;
+		if (this.engine.dateOfJournalNote(file) !== todayISO()) return;
+		await this.addNudge(file, { silent: true });
 	}
 
 	// --------------------------------------------------------------------- writes

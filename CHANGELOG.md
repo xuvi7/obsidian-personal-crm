@@ -7,6 +7,17 @@ All notable changes to Personal CRM. Versions follow
 
 ### Added
 
+- **Reach-outs written into your daily note**, off by default. When a dated note
+  for today is created, who's overdue goes in as unchecked tasks under a heading
+  you choose. A link in an open task already doesn't count as contact, so the nudge
+  can't silence the reminder that produced it — and ticking the box makes it a
+  completed task, which does count, so the gesture that means "done" is the one
+  that logs it.
+- Tasks under that heading are excluded from the Follow-ups tab, since they restate
+  the Due tab and would accumulate daily. Turning the nudge off makes existing
+  blocks ordinary follow-ups again.
+- `Add today's reach-outs to this note` command, for notes that already exist.
+  Running it twice won't stack a second block.
 - **Places.** Where someone is, read from `prm-location` or whichever key the
   vault already uses (`location`, `city`, `based-in`, configurable). Shown on the
   row as `@Lisbon` and clickable to filter; an `@`-prefixed search matches places
@@ -59,6 +70,11 @@ All notable changes to Personal CRM. Versions follow
 
 ### Performance
 
+- Nothing is written, and no dated-note check runs, until the workspace is ready.
+  Obsidian replays `create` for every file in the vault while it loads.
+- With all three features on, a rebuild is ~3.1 ms on a 2,372-file vault against a
+  2.66 ms baseline, inside a ±0.3 ms run-to-run band. Heading matching rules
+  candidates out on length before allocating a lowercased copy.
 - Reading locations costs less than the measurement noise on a 2,372-file vault
   (~3.0 ms per rebuild, within a ±0.2 ms band). The key list is built once per
   rebuild rather than once per person.
