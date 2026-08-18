@@ -5,6 +5,7 @@ import type { PersonRecord, PersonStatus } from "./types";
 import { formatDuration, relativeToToday, todayISO } from "./dates";
 import {
 	LogContactModal,
+	PlacePickerModal,
 	PersonActionsModal,
 	SnoozeModal,
 	TagPickerModal,
@@ -299,6 +300,13 @@ export class PrmDashboardView extends ItemView {
 				void this.plugin.bulkTag(paths, tag, false);
 			}).open();
 		});
+		act("Set place", "map-pin", () => {
+			new PlacePickerModal(
+				this.plugin,
+				(place) => void this.plugin.bulkSetLocation(paths, place),
+				"set",
+			).open();
+		});
 		act("Snooze", "alarm-clock", () => {
 			new SnoozeModal(
 				this.plugin,
@@ -348,7 +356,7 @@ export class PrmDashboardView extends ItemView {
 
 		const search = controls.createEl("input", {
 			cls: "prm-search",
-			attr: { type: "search", placeholder: "Filter by name or #tag…" },
+			attr: { type: "search", placeholder: "Filter by name, #tag or @place…" },
 		});
 		search.value = this.query;
 		// Filtering hides already-built rows rather than rebuilding them, so typing
@@ -386,17 +394,41 @@ export class PrmDashboardView extends ItemView {
 		this.applyQuery();
 	}
 
+	/** Show everyone in one place, from the "Who's in…" command. */
+	showPlace(place: string): void {
+		this.filter = "all";
+		this.renderAll();
+		this.setQuery(`@${place}`);
+	}
+
+	/**
+	 * Point the search box at a query, from a chip or from a command.
+	 *
+	 * Rows are filtered in place rather than rebuilt, so this stays cheap enough to
+	 * call on every keystroke.
+	 */
+	setQuery(query: string): void {
+		this.query = query;
+		if (this.searchEl) this.searchEl.value = query;
+		this.applyQuery();
+	}
+
 	/** Show/hide built rows to match the search box. */
 	private applyQuery(): void {
-		// A leading '#' means "this tag", not "this text anywhere": clicking the
-		// #gym chip shouldn't also match someone whose relationship reads
-		// "climbing gym". Plain text still searches tags along with everything else.
-		const byTag = this.query.trimStart().startsWith("#");
+		// A leading '#' or '@' scopes the search to tags or places: clicking the
+		// #gym chip shouldn't also match someone whose relationship reads "climbing
+		// gym". Plain text still searches all of it together.
+		const trimmed = this.query.trimStart();
+		const field = trimmed.startsWith("#")
+			? "prmTags"
+			: trimmed.startsWith("@")
+				? "prmPlace"
+				: "prmSearch";
 		const q = normalizeName(this.query);
 		let visible = 0;
 		for (const child of Array.from(this.listEl.children)) {
 			const el = child as HTMLElement;
-			const haystack = byTag ? el.dataset.prmTags : el.dataset.prmSearch;
+			const haystack = el.dataset[field];
 			if (haystack === undefined) continue;
 			const show = q.length === 0 || haystack.includes(q);
 			el.toggleClass("prm-hidden", !show);
@@ -504,11 +536,19 @@ export class PrmDashboardView extends ItemView {
 		row.dataset.prmPath = record.path;
 		row.toggleClass("prm-row-selected", this.selection.has(record.path));
 		row.dataset.prmSearch = normalizeName(
-			[record.name, ...record.aliases, record.relationship ?? "", ...record.tags].join(" "),
+			[
+				record.name,
+				...record.aliases,
+				record.relationship ?? "",
+				record.location ?? "",
+				...record.tags,
+			].join(" "),
 		);
-		// Tags on their own, for '#'-prefixed queries. normalizeName turns '#'
-		// into a space, so the query and these values meet in the same spelling.
+		// Tags and places on their own, for '#'- and '@'-prefixed queries.
+		// normalizeName turns both sigils into a space, so query and value meet in
+		// the same spelling.
 		row.dataset.prmTags = normalizeName(record.tags.join(" "));
+		row.dataset.prmPlace = normalizeName(record.location ?? "");
 
 		const bar = row.createDiv({ cls: "prm-bar" });
 		const fill = bar.createDiv({ cls: "prm-bar-fill" });
@@ -616,16 +656,22 @@ export class PrmDashboardView extends ItemView {
 		}
 		if (record.relationship) meta.createSpan({ text: record.relationship });
 
+		if (record.location) {
+			const place = meta.createEl("a", { cls: "prm-place", text: record.location });
+			place.setAttribute("aria-label", `Show everyone in ${record.location}`);
+			place.onclick = (evt) => {
+				evt.preventDefault();
+				this.setQuery(this.query === `@${record.location}` ? "" : `@${record.location}`);
+			};
+		}
+
 		for (const tag of record.tags) {
 			const chip = meta.createEl("a", { cls: "prm-tag", text: `#${tag}` });
 			chip.setAttribute("aria-label", `Filter by ${tag}`);
 			chip.onclick = (evt) => {
 				evt.preventDefault();
 				// Clicking a tag filters to it; clicking the same one again clears.
-				const next = this.query === `#${tag}` ? "" : `#${tag}`;
-				this.query = next;
-				if (this.searchEl) this.searchEl.value = next;
-				this.applyQuery();
+				this.setQuery(this.query === `#${tag}` ? "" : `#${tag}`);
 			};
 		}
 

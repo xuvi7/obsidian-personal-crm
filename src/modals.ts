@@ -414,6 +414,82 @@ export class TagPickerModal extends SuggestModal<TagChoice> {
 	}
 }
 
+// ------------------------------------------------------------------ place picker
+
+interface PlaceChoice {
+	place: string;
+	count: number;
+	isNew?: boolean;
+	clears?: boolean;
+}
+
+/**
+ * Pick a place to see who's there.
+ *
+ * Locations are free text and spelled however the vault spells them ("NYC" and
+ * "New York" are different places here), so the list is what's actually written
+ * down rather than anything canonicalised — and matching is a substring, so "NY"
+ * finds "Brooklyn, NY".
+ */
+export class PlacePickerModal extends SuggestModal<PlaceChoice> {
+	private choices: PlaceChoice[];
+
+	/**
+	 * @param mode "show" lists places that exist; "set" also offers whatever the
+	 *   user types, plus a way to clear the field.
+	 */
+	constructor(
+		private plugin: PrmPlugin,
+		private onPick: (place: string) => void,
+		private mode: "show" | "set" = "show",
+	) {
+		super(plugin.app);
+		this.setPlaceholder(mode === "show" ? "Who's in…" : "Set place to… (type to add)");
+		this.choices = plugin.engine.allLocations();
+	}
+
+	getSuggestions(query: string): PlaceChoice[] {
+		const raw = query.trim().replace(/^@/, "");
+		const q = raw.toLowerCase();
+		const matches =
+			q.length === 0 ? this.choices : this.choices.filter((c) => c.place.toLowerCase().includes(q));
+		if (this.mode === "show") return matches;
+
+		const out = [...matches];
+		if (q.length > 0 && !matches.some((m) => m.place.toLowerCase() === q)) {
+			out.push({ place: raw, count: 0, isNew: true });
+		}
+		out.push({ place: "", count: 0, clears: true });
+		return out;
+	}
+
+	renderSuggestion(choice: PlaceChoice, el: HTMLElement): void {
+		el.addClass("prm-suggestion");
+		if (choice.clears) {
+			el.createSpan({ text: "Clear the place", cls: "prm-suggestion-title" });
+			return;
+		}
+		el.createSpan({ text: choice.place, cls: "prm-suggestion-title" });
+		el.createSpan({
+			text: choice.isNew
+				? "new place"
+				: `${choice.count} ${choice.count === 1 ? "person" : "people"}`,
+			cls: "prm-suggestion-aux",
+		});
+	}
+
+	onChooseSuggestion(choice: PlaceChoice): void {
+		this.onPick(choice.place);
+	}
+
+	onNoSuggestion(): void {
+		this.emptyStateText =
+			this.choices.length === 0
+				? "No locations recorded yet. Add prm-location: Lisbon to a person's note."
+				: "Nobody recorded there.";
+	}
+}
+
 // ----------------------------------------------------------------- snooze modal
 
 interface SnoozeChoice {
@@ -844,6 +920,7 @@ export class PersonActionsModal extends Modal {
 			meta.createSpan({ text: `${record.mentionCount} mentions` });
 		}
 		if (record.relationship) meta.createSpan({ text: record.relationship });
+		if (record.location) meta.createSpan({ cls: "prm-place", text: record.location });
 
 		const previewEl = contentEl.createDiv({ cls: "prm-preview prm-preview-fit" });
 		const file = this.app.vault.getAbstractFileByPath(record.path);
@@ -895,6 +972,14 @@ export class PersonActionsModal extends Modal {
 			new TagPickerModal(this.plugin, "add", this.plugin.engine.allTags(), (tag) => {
 				void this.plugin.bulkTag([record.path], tag, true);
 			}).open();
+			this.close();
+		});
+		this.actionButton(primary, "map-pin", "Place", () => {
+			new PlacePickerModal(
+				this.plugin,
+				(place) => void this.plugin.bulkSetLocation([record.path], place),
+				"set",
+			).open();
 			this.close();
 		});
 		this.actionButton(primary, "file-text", "Open note", () => {

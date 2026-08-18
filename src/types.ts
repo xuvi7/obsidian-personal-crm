@@ -51,6 +51,8 @@ export interface PersonRecord {
 	snoozeUntil: string | null;
 	birthday: string | null;
 	relationship: string | null;
+	/** Where they are, for reconnecting when you're in the same place. */
+	location: string | null;
 	createdDate: string | null;
 	/** Frontmatter tags used as groups, without '#' and without the marker tags. */
 	tags: string[];

@@ -12,6 +12,7 @@ import {
 	CreatePersonModal,
 	LogContactModal,
 	PersonPickerModal,
+	PlacePickerModal,
 	ReachOutModal,
 	SnoozeModal,
 	TierPickerModal,
@@ -343,6 +344,14 @@ export default class PrmPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "whos-in",
+			name: "Who's in…",
+			callback: () => {
+				new PlacePickerModal(this, (place) => void this.showPlace(place)).open();
+			},
+		});
+
+		this.addCommand({
 			id: "create-person",
 			name: "Add a person…",
 			callback: () => this.openCreatePerson(),
@@ -411,6 +420,19 @@ export default class PrmPlugin extends Plugin {
 		const leaf = this.app.workspace.getLeaf("tab");
 		await leaf.setViewState({ type: PRM_VIEW_TYPE, active: true });
 		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	/**
+	 * Open the dashboard showing everyone in one place.
+	 *
+	 * Switches to Tracked first: a trip is about who's reachable there, and the
+	 * default Due tab would hide the people who simply aren't overdue yet.
+	 */
+	async showPlace(place: string): Promise<void> {
+		await this.openDashboard();
+		const leaf = this.app.workspace.getLeavesOfType(PRM_VIEW_TYPE)[0];
+		const view = leaf?.view;
+		if (view instanceof PrmDashboardView) view.showPlace(place);
 	}
 
 	startReachOutSession(): void {
@@ -732,6 +754,29 @@ export default class PrmPlugin extends Plugin {
 				const field = fm["tags"] !== undefined ? "tags" : fm["tag"] !== undefined ? "tag" : "tags";
 				if (next.length === 0) delete fm[field];
 				else fm[field] = next;
+			});
+		});
+	}
+
+	/**
+	 * Set (or clear) where people are.
+	 *
+	 * Always writes `prm-location`, even when the note already carries a plain
+	 * `location` from the contact importer: that field belongs to the importer and
+	 * to whatever else reads it, so this doesn't take it over. Clearing removes
+	 * only the key this plugin owns, for the same reason.
+	 */
+	async bulkSetLocation(paths: string[], place: string): Promise<BulkResult> {
+		const clean = place.trim();
+		const key = FRONTMATTER_KEYS.location;
+		const label = clean
+			? `Set ${describeCount(paths.length, "person", "people")} to ${clean}`
+			: `Clear the place for ${describeCount(paths.length, "person", "people")}`;
+
+		return this.trackedMany(paths, label, async (file) => {
+			await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
+				if (clean.length === 0) delete fm[key];
+				else fm[key] = clean;
 			});
 		});
 	}

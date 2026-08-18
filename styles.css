@@ -414,6 +414,27 @@
 	gap: 0.35rem;
 }
 
+/* A place reads as a place: same affordance as a tag chip, different accent. */
+.prm-place {
+	color: var(--text-muted);
+	text-decoration: none;
+}
+
+/* Only the row's place is clickable; the person panel shows one as plain text. */
+a.prm-place {
+	cursor: pointer;
+}
+
+.prm-place::before {
+	content: "@";
+	opacity: 0.6;
+}
+
+a.prm-place:hover {
+	color: var(--text-accent);
+	text-decoration: underline;
+}
+
 /* ------------------------------------------------------------------ follow-ups */
 
 .prm-chip-loop {

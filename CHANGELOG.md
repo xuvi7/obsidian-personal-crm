@@ -7,6 +7,15 @@ All notable changes to Personal CRM. Versions follow
 
 ### Added
 
+- **Places.** Where someone is, read from `prm-location` or whichever key the
+  vault already uses (`location`, `city`, `based-in`, configurable). Shown on the
+  row as `@Lisbon` and clickable to filter; an `@`-prefixed search matches places
+  only, by substring, so `@NY` finds "Brooklyn, NY".
+- **Who's in…** command: pick a place from the ones your vault records, with a
+  count for each, and see everyone there sorted by who's most overdue.
+- **Set place** on one person from their panel, or on a whole selection from the
+  bulk bar. It writes `prm-location` even when a plain `location` exists, so the
+  contact importer's own field is left to the importer.
 - **Follow-ups.** An unchecked task counts as an open follow-up for a person when
   it lives in their own note or links to them from anywhere in the vault. They show
   as a chip on the row, get a **Follow-ups** tab, and are listed in the person
@@ -50,6 +59,9 @@ All notable changes to Personal CRM. Versions follow
 
 ### Performance
 
+- Reading locations costs less than the measurement noise on a 2,372-file vault
+  (~3.0 ms per rebuild, within a ±0.2 ms band). The key list is built once per
+  rebuild rather than once per person.
 - Follow-up tracking reads only the metadata cache, so a rebuild costs 0.2 ms more
   on a 2,372-file vault (2.66 ms → 2.86 ms) and nothing measurable on notes that
   have bullets but no tasks. Links are matched to tasks by walking both in document

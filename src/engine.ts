@@ -44,6 +44,8 @@ export class PrmEngine {
 	private exclusionTokens: string[][] = [];
 	/** Lowercased marker tags, so group tags can be told from identification ones. */
 	private markerTagSet = new Set<string>();
+	/** `prm-location` plus the configured fallbacks, in lookup order. */
+	private locationKeys: string[] = [];
 	private listeners = new Set<() => void>();
 	private diag: PrmDiagnostics = emptyDiagnostics();
 
@@ -123,6 +125,9 @@ export class PrmEngine {
 		this.exclusionTokens = this.settings.personExclusions
 			.map((fragment) => nameTokens(fragment))
 			.filter((tokens) => tokens.length > 0);
+
+		// Built once per rebuild, not once per person.
+		this.locationKeys = [FRONTMATTER_KEYS.location, ...this.settings.locationKeys];
 
 		this.markerTagSet = new Set<string>();
 		for (const tag of [...this.settings.markerTags, ...this.settings.personTags]) {
@@ -510,6 +515,7 @@ export class PrmEngine {
 			birthday,
 			relationship:
 				typeof fm[K.relationship] === "string" ? (fm[K.relationship] as string) : null,
+			location: this.readLocation(fm),
 			createdDate,
 
 			contactDates: [],
@@ -536,6 +542,43 @@ export class PrmEngine {
 	 * The note's frontmatter tags, minus the ones that only say "this is a person".
 	 * Sorted so the dashboard and the tag sort are stable.
 	 */
+	/**
+	 * Where someone is, from `prm-location` or whichever key the vault already
+	 * uses. A list can hold several places; the first is the one shown.
+	 */
+	private readLocation(fm: Record<string, unknown>): string | null {
+		for (const key of this.locationKeys) {
+			const raw = fm[key];
+			// Array.isArray narrows to any[]; keep the element unknown so asText
+			// stays the only thing deciding what a frontmatter value may become.
+			const value: unknown = Array.isArray(raw) ? (raw as unknown[])[0] : raw;
+			const text = asText(value)?.trim();
+			if (text !== undefined && text.length > 0) return text;
+		}
+		return null;
+	}
+
+	/**
+	 * Distinct locations with how many people are in each, most-used first.
+	 *
+	 * Spellings aren't canonicalised — "NYC" and "New York" are different places
+	 * here — so this reports what the vault actually says, and the first spelling
+	 * seen wins for display.
+	 */
+	allLocations(): { place: string; count: number }[] {
+		const counts = new Map<string, { place: string; count: number }>();
+		for (const record of this.index.values()) {
+			if (!record.location) continue;
+			const key = record.location.toLowerCase();
+			const seen = counts.get(key);
+			if (seen) seen.count++;
+			else counts.set(key, { place: record.location, count: 1 });
+		}
+		return [...counts.values()].sort(
+			(a, b) => b.count - a.count || a.place.localeCompare(b.place),
+		);
+	}
+
 	private groupTags(fm: Record<string, unknown>): string[] {
 		const raw = readTagList(fm["tags"] ?? fm["tag"]);
 		if (raw.length === 0) return [];

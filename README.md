@@ -167,6 +167,26 @@ With a selection, a bar appears above the list: **Log contact** (one date and
 note applied to everyone), **Set cadence**, **Add tag**, **Remove tag** and
 **Snooze**. Each is a single undo step, not one per person.
 
+### Places
+
+Distance is what breaks contact, so the plugin tracks where people are. Set it
+with **Set place** — on one person from their panel, or on a selection from the
+bulk bar — or write `prm-location: Lisbon` yourself. A plain `location` (which the
+contact importer writes), `city`, or `based-in` are read too, and the keys are
+configurable.
+
+The place shows on the row as `@Lisbon`; click it to filter, click again to clear.
+An `@`-prefixed search matches places only, and matching is a substring, so `@NY`
+finds "Brooklyn, NY". Spellings aren't canonicalised — "NYC" and "New York" stay
+different places, because guessing they're the same is how a location field starts
+lying to you.
+
+The **Who's in…** command lists the places in your vault with a count for each,
+then shows everyone there sorted by who's most overdue: the "I'm in Lisbon next
+week, who should I see?" question, answered from what you already wrote down.
+Setting a place writes `prm-location` even when a plain `location` is present —
+that field belongs to the importer and to whatever else reads it.
+
 ### Follow-ups
 
 The other half of losing touch is forgetting what you said you'd do. An

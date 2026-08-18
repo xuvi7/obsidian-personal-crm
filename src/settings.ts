@@ -28,6 +28,11 @@ export interface PrmSettings {
 	/** Basename fragments that are never people, e.g. templates. */
 	personExclusions: string[];
 	/**
+	 * Frontmatter keys read for someone's location, after `prm-location`. The
+	 * contact importer writes a plain `location`, and vaults predate this plugin.
+	 */
+	locationKeys: string[];
+	/**
 	 * Tags that mark a note as a person rather than grouping them. Hidden from the
 	 * tag list so every row isn't captioned with the same structural tag.
 	 */
@@ -92,6 +97,7 @@ export const DEFAULT_SETTINGS: PrmSettings = {
 	personTypeValue: "",
 	requireTagOrType: false,
 	personExclusions: ["template", "templates", "untitled", "index", "MOC"],
+	locationKeys: ["location", "city", "based-in"],
 	markerTags: ["people", "person", "contact", "contacts"],
 
 	trackOpenLoops: true,
@@ -144,6 +150,7 @@ export const FRONTMATTER_KEYS = {
 	ignoreJournal: "prm-ignore-journal",
 	birthday: "prm-birthday",
 	relationship: "prm-relationship",
+	location: "prm-location",
 } as const;
 
 export function tierById(settings: PrmSettings, id: string | null): Tier | null {
@@ -168,12 +175,13 @@ function splitList(raw: string): string[] {
 /** Settings that hold a list but are edited as one comma-separated field. */
 const CSV_KEYS: Record<
 	string,
-	"personTags" | "personExclusions" | "createdDateKeys" | "markerTags"
+	"personTags" | "personExclusions" | "createdDateKeys" | "markerTags" | "locationKeys"
 > = {
 	personTagsCsv: "personTags",
 	personExclusionsCsv: "personExclusions",
 	createdDateKeysCsv: "createdDateKeys",
 	markerTagsCsv: "markerTags",
+	locationKeysCsv: "locationKeys",
 };
 
 /**
@@ -528,6 +536,16 @@ export class PrmSettingTab extends PluginSettingTab {
 						type: "text",
 						key: "createdDateKeysCsv",
 						placeholder: "created, date created",
+					},
+				},
+				{
+					name: "Location fields",
+					desc: "Read for someone's place, after prm-location. The contact importer writes a plain location, and your vault may already use something else.",
+					aliases: ["place", "city", "where", "nearby"],
+					control: {
+						type: "text",
+						key: "locationKeysCsv",
+						placeholder: "location, city",
 					},
 				},
 				{
