@@ -607,7 +607,7 @@ a.prm-place:hover {
 	border: none;
 	border-radius: 2px;
 	cursor: pointer;
-	background-color: var(--background-modifier-border);
+	background-color: transparent;
 	box-shadow: none;
 }
 
@@ -621,68 +621,45 @@ a.prm-place:hover {
 
 /*
  * Four steps rather than a gradient: a count you can read off the shade.
+ * Darker means more.
  *
- * Darker means more. The steps come from the theme's own accent — its hue and
- * saturation, with lightness scaled around the accent's own — so the ramp follows
- * whatever accent colour is set rather than a palette baked in here.
+ * Literal hex, deliberately. Nothing here goes through var(), calc(), or
+ * color-mix(), because three attempts to derive these from the theme each shipped
+ * as an invisible grid on a real vault:
  *
- * Scaled *around* --accent-l rather than down from a fixed ceiling, which is what
- * keeps it working in both directions of theme. On a dark theme "darker" trends
- * toward the background, so the darkest step stops well short of it; on a light
- * theme the same ramp reads as ordinary increasing depth. Every step stays a
- * saturated accent colour, so none of them can be confused with an empty cell.
+ *   - color-mix() blends of the accent into the border colour;
+ *   - hsl() built from --accent-h/--accent-s/--accent-l;
+ *   - the accent at fixed alpha over the empty cell's colour.
  *
- * Each level declares a literal first, for a theme that doesn't publish its accent
- * components; the literals are Obsidian's default accent at the same lightnesses.
+ * A var() that fails to substitute is invalid *at computed-value time*, which does
+ * not fall back to an earlier declaration in the same rule — the property becomes
+ * unset, and an unset background-color is transparent. So a literal fallback
+ * declared above a var()-based one buys nothing, and the whole family of
+ * theme-derived approaches has a failure mode that ends in no colour at all.
+ * Four constants cannot fail.
  *
- * Earlier attempts, each of which failed differently:
- *   - color-mix() blends into the border colour: invisible without color-mix
- *     support, and the low steps collapsed into looking empty. The low steps are
- *     nearly all the data — 201 of 362 filled days on a real vault.
- *   - accent-at-alpha over the empty colour: worked, but ran light-to-dark the
- *     wrong way round for reading "more" as "darker".
- *   - opacity on the cell: dims the hover outline and selection ring with it.
+ * The ramp is the GitHub-contributions green from the heatmap-tracker plugin
+ * (github.com/mokkiebear/heatmap-tracker, Apache 2.0), which arrives at literal
+ * palettes for the same reason. It reads on light and dark themes alike.
+ *
+ * To recolour these, override .prm-cal-l1 through .prm-cal-l4 in a CSS snippet.
  */
+.prm-cal-l1 { background-color: #c6e48b; }
+.prm-cal-l2 { background-color: #7bc96f; }
+.prm-cal-l3 { background-color: #49af5d; }
+.prm-cal-l4 { background-color: #196127; }
+
 /*
- * Empty is a hollow slot, not a dark fill.
+ * Empty is a hollow slot, not a fill.
  *
- * With "darker means more", the busiest cells necessarily approach the background
- * on a dark theme — measured at 1.14 contrast against a filled empty cell, close
- * enough to be mistaken for one. Drawing empty as an outline instead means any
- * solid fill is unambiguously contact, however dark it gets, and the ramp keeps its
- * full range.
+ * With darker-meaning-more the busiest cells sit close to a dark background, near
+ * enough to be mistaken for an empty cell. An outline makes any solid fill
+ * unambiguously contact, and keeps the ramp's full range usable. A literal grey so
+ * this can't fail either; it reads on both themes.
  */
 .prm-cal-l0 {
 	background-color: transparent;
-	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
-}
-
-.prm-cal-l1 {
-	background-color: #c9baf7;
-	background-color: hsl(
-		var(--accent-h, 254) var(--accent-s, 80%) min(92%, calc(var(--accent-l, 68%) * 1.25))
-	);
-}
-
-.prm-cal-l2 {
-	background-color: #977cf0;
-	background-color: hsl(
-		var(--accent-h, 254) var(--accent-s, 80%) min(84%, calc(var(--accent-l, 68%) * 1.05))
-	);
-}
-
-.prm-cal-l3 {
-	background-color: #653dea;
-	background-color: hsl(
-		var(--accent-h, 254) var(--accent-s, 80%) max(28%, calc(var(--accent-l, 68%) * 0.85))
-	);
-}
-
-.prm-cal-l4 {
-	background-color: #3d15c2;
-	background-color: hsl(
-		var(--accent-h, 254) var(--accent-s, 80%) max(22%, calc(var(--accent-l, 68%) * 0.62))
-	);
+	box-shadow: inset 0 0 0 1px rgba(140, 140, 140, 0.4);
 }
 
 /* After the levels on purpose: a future or missing period must not be shaded like

@@ -220,9 +220,16 @@ header, or the `Open contact calendar` command — with four scales:
 | **Yearly** | one row of years | everything on record |
 
 Cells are shaded by how many interactions fall in the period — **darker means
-more** — with a key in the header. The steps come from your theme's own accent
-colour, and an empty period is drawn as a hollow slot rather than a dark fill, so a
-busy period can't be mistaken for an empty one on a dark theme. Click one to see who, and click a name to open their note. Click the same
+more** — with a key in the header, and an empty period is drawn as a hollow slot
+rather than a fill, so a busy period can't be mistaken for an empty one. The four
+shades are literal colours rather than anything derived from your theme: a `var()`
+that fails to substitute is invalid *at computed-value time*, which does not fall
+back to an earlier declaration, and an unset `background-color` is transparent — so
+every theme-derived version of this had a failure mode that ended in no colour at
+all. The ramp is the GitHub-contributions green, borrowed from
+[heatmap-tracker](https://github.com/mokkiebear/heatmap-tracker) (Apache 2.0), which
+arrives at literal palettes for the same reason. Override `.prm-cal-l1` through
+`.prm-cal-l4` in a CSS snippet to recolour them. Click one to see who, and click a name to open their note. Click the same
 period again to dismiss the detail. Year rows are contiguous even when a year is
 empty — a calendar that silently skips time isn't a calendar — and anything older
 than the range is reported as a count rather than quietly dropped.

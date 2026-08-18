@@ -61,12 +61,19 @@ All notable changes to Personal CRM. Versions follow
   reading. It now redraws when the index settles.
 - **The follow-up checkbox sat below its text.** `align-items: baseline` on a
   checkbox, which has no text baseline of its own.
-- **Calendar shading now runs darker for more**, built from the theme's own accent
-  hue and saturation with lightness scaled around the accent's own, so it follows
-  whatever accent you've set and works in light and dark themes alike. An empty
-  period is a hollow slot rather than a dark fill: with darker-means-more the busiest
-  cells necessarily approach the background on a dark theme (measured at 1.14
-  contrast against a filled empty cell), and an outline removes the ambiguity.
+- **Calendar shading now runs darker for more**, as four literal colours — the
+  GitHub-contributions green, borrowed from
+  [heatmap-tracker](https://github.com/mokkiebear/heatmap-tracker) (Apache 2.0).
+  Nothing in the fill path goes through `var()`, `calc()` or `color-mix()` any more.
+  A `var()` that fails to substitute is invalid *at computed-value time*, which does
+  not fall back to an earlier declaration in the same rule — the property becomes
+  unset, and an unset `background-color` is transparent. So a literal fallback above
+  a `var()`-based one buys nothing, and every theme-derived approach shared a failure
+  mode ending in no colour at all. Override `.prm-cal-l1`–`.prm-cal-l4` in a CSS
+  snippet to recolour.
+- An empty period is a hollow outlined slot rather than a fill: with darker-means-more
+  the busiest cells necessarily approach a dark background (measured at 1.14 contrast
+  against a filled empty cell), and an outline removes the ambiguity.
 - Shade levels use two regimes. When the busiest period holds only a handful, counts
   map straight to levels, so a lone interaction is the *lightest* step — every
   single-person calendar is a 0-or-1 range, and a relative scale painted its days
