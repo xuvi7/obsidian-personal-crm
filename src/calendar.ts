@@ -312,6 +312,29 @@ export function trailingMonths(
 }
 
 /**
+ * The shade for each level, 0 (empty) first.
+ *
+ * Set inline on the element rather than from a stylesheet. Grid cells are
+ * `<button>`s so they're focusable and operable from the keyboard, and Obsidian
+ * styles buttons through nested selectors whose specificity a single class of mine
+ * can't beat — so a CSS rule lost to the app's own button background, leaving a
+ * uniform, colourless grid. The legend's swatches are spans and were coloured
+ * correctly the whole time; that mismatch is what identified it. An inline style
+ * beats any non-important rule.
+ *
+ * The ramp is the GitHub-contributions green from the heatmap-tracker plugin
+ * (github.com/mokkiebear/heatmap-tracker, Apache 2.0), which sets its colours inline
+ * for the same reason. It reads on light and dark themes alike.
+ */
+export const HEAT_COLORS: readonly string[] = [
+	"", // level 0 is drawn as a hollow outline, not a fill
+	"#c6e48b",
+	"#7bc96f",
+	"#49af5d",
+	"#196127",
+];
+
+/**
  * Shade level 0-4 for a count. Higher means darker.
  *
  * Two regimes, because a relative scale alone gets both ends wrong.

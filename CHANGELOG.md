@@ -61,6 +61,17 @@ All notable changes to Personal CRM. Versions follow
   reading. It now redraws when the index settles.
 - **The follow-up checkbox sat below its text.** `align-items: baseline` on a
   checkbox, which has no text baseline of its own.
+- **The calendar's colours were losing a specificity contest, not failing to
+  compute.** Obsidian's `app.css` carries `button:not(.clickable-icon) {
+  background-color: …; box-shadow: … }`, whose specificity is (0,1,1) — one class and
+  one type — and a plugin's single `.prm-cal-cell` (0,1,0) doesn't outrank it. Grid
+  cells are `<button>`s for keyboard access, so the app's own button background won
+  and painted a uniform grid; the legend's swatches are `<span>`s, which no button
+  rule touches, and were correct the whole time. That mismatch is what identified it.
+  Cell shades now come from properties set per cell with `setCssProps`, read by a
+  rule with enough specificity to win.
+- **Tier chips on the dashboard had the same bug** and have since they became buttons:
+  a coloured outline chip was rendering as a filled grey button, at input height.
 - **Calendar shading now runs darker for more**, as four literal colours — the
   GitHub-contributions green, borrowed from
   [heatmap-tracker](https://github.com/mokkiebear/heatmap-tracker) (Apache 2.0).

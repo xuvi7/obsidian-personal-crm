@@ -121,7 +121,10 @@
 	flex-wrap: wrap;
 }
 
-.prm-tab {
+/* Also buttons, so also outranked by the app's own button styling — a flat tab row
+   was rendering as a row of raised grey buttons. */
+.prm-tabs .prm-tab,
+.prm-controls .prm-tab {
 	background: transparent;
 	box-shadow: none;
 	color: var(--text-muted);
@@ -130,11 +133,13 @@
 	font-size: var(--font-ui-small);
 }
 
-.prm-tab:hover {
+.prm-tabs .prm-tab:hover,
+.prm-controls .prm-tab:hover {
 	background: var(--background-modifier-hover);
 }
 
-.prm-tab-active {
+.prm-tabs .prm-tab-active,
+.prm-controls .prm-tab-active {
 	background: var(--background-modifier-active-hover);
 	color: var(--text-normal);
 	font-weight: 600;
@@ -283,6 +288,23 @@
 	color: var(--prm-chip-color);
 	border: 1px solid currentColor;
 	white-space: nowrap;
+}
+
+/*
+ * A chip that's a button has to shed the app's button chrome.
+ *
+ * Obsidian's app.css carries `button:not(.clickable-icon) { background-color: …;
+ * box-shadow: … }`, whose specificity is (0,1,1) — one class and one type — so a
+ * plugin's single `.prm-chip` (0,1,0) loses. A coloured outline chip was therefore
+ * rendering as a filled grey button wherever it was clickable, which is every tier
+ * chip on the dashboard. Two classes beat it. `height` comes from the bare `button`
+ * rule, which a single class does outrank, but it's set here for the same reason:
+ * a chip hugs its text rather than standing at input height.
+ */
+.prm-chip.prm-chip-button {
+	background-color: transparent;
+	box-shadow: none;
+	height: auto;
 }
 
 .prm-chip-muted {
@@ -541,7 +563,7 @@ a.prm-place:hover {
 	margin-left: auto;
 }
 
-.prm-cal-legend .prm-cal-cell {
+.prm-calview .prm-cal-legend .prm-cal-cell {
 	width: 10px;
 	height: 10px;
 	cursor: default;
@@ -599,16 +621,24 @@ a.prm-place:hover {
 }
 
 /* A button, so a period is reachable and operable from the keyboard. */
-.prm-cal-cell {
+/* Cells are <button>s. Obsidian's `button:not(.clickable-icon)` (0,1,1) sets
+   background-color and box-shadow, which a single `.prm-cal-cell` (0,1,0) loses to —
+   that is what produced a uniform, colourless grid while the legend's spans were
+   correct. Padding and height come from the bare `button` rule (0,0,1), which a
+   single class does outrank; they're restated here only because this selector now
+   carries them. */
+.prm-calview .prm-cal-table .prm-cal-cell,
+.prm-calview .prm-cal-legend .prm-cal-cell {
 	flex: 0 0 auto;
+	box-sizing: border-box;
 	width: 13px;
 	height: 13px;
+	min-width: 0;
 	padding: 0;
+	margin: 0;
 	border: none;
 	border-radius: 2px;
 	cursor: pointer;
-	background-color: transparent;
-	box-shadow: none;
 }
 
 .prm-cal-cell:hover:not(:disabled) {
@@ -620,61 +650,33 @@ a.prm-place:hover {
 }
 
 /*
- * Four steps rather than a gradient: a count you can read off the shade.
- * Darker means more.
+ * A cell's fill and its empty-state outline, from properties set per cell in
+ * calendar-view.ts. The values are in HEAT_COLORS; change them there to recolour.
  *
- * Literal hex, deliberately. Nothing here goes through var(), calc(), or
- * color-mix(), because three attempts to derive these from the theme each shipped
- * as an invisible grid on a real vault:
- *
- *   - color-mix() blends of the accent into the border colour;
- *   - hsl() built from --accent-h/--accent-s/--accent-l;
- *   - the accent at fixed alpha over the empty cell's colour.
- *
- * A var() that fails to substitute is invalid *at computed-value time*, which does
- * not fall back to an earlier declaration in the same rule — the property becomes
- * unset, and an unset background-color is transparent. So a literal fallback
- * declared above a var()-based one buys nothing, and the whole family of
- * theme-derived approaches has a failure mode that ends in no colour at all.
- * Four constants cannot fail.
- *
- * The ramp is the GitHub-contributions green from the heatmap-tracker plugin
- * (github.com/mokkiebear/heatmap-tracker, Apache 2.0), which arrives at literal
- * palettes for the same reason. It reads on light and dark themes alike.
- *
- * To recolour these, override .prm-cal-l1 through .prm-cal-l4 in a CSS snippet.
+ * The selectors are deliberately over-specific. Cells are <button>s — focusable and
+ * keyboard-operable — and Obsidian styles buttons through nested selectors that
+ * outrank a plugin's single class, so `.prm-cal-cell` alone lost to the app's own
+ * button background and shadow: the grid rendered uniform while the legend's spans,
+ * which no button rule touches, were correct the whole time. That mismatch is what
+ * identified it.
  */
-.prm-cal-l1 { background-color: #c6e48b; }
-.prm-cal-l2 { background-color: #7bc96f; }
-.prm-cal-l3 { background-color: #49af5d; }
-.prm-cal-l4 { background-color: #196127; }
-
-/*
- * Empty is a hollow slot, not a fill.
- *
- * With darker-meaning-more the busiest cells sit close to a dark background, near
- * enough to be mistaken for an empty cell. An outline makes any solid fill
- * unambiguously contact, and keeps the ramp's full range usable. A literal grey so
- * this can't fail either; it reads on both themes.
- */
-.prm-cal-l0 {
-	background-color: transparent;
-	box-shadow: inset 0 0 0 1px rgba(140, 140, 140, 0.4);
+.prm-calview .prm-cal-table .prm-cal-cell,
+.prm-calview .prm-cal-legend .prm-cal-cell {
+	background-color: var(--prm-cell-bg, transparent);
+	box-shadow: var(--prm-cell-ring, none);
 }
 
-/* After the levels on purpose: a future or missing period must not be shaded like
-   a period that simply had no contact. */
-.prm-cal-hole,
-.prm-cal-future,
-.prm-cal-future.prm-cal-l0 {
+/* A future or missing period isn't a period yet: no fill and not even the empty
+   slot's outline. Same specificity as the rule above, for the same reason. */
+.prm-calview .prm-cal-table .prm-cal-hole,
+.prm-calview .prm-cal-table .prm-cal-future {
 	background-color: transparent;
-	/* Not even the empty slot's outline: a future period isn't a period yet. */
 	box-shadow: none;
 	cursor: default;
 }
 
 /* Year view has few, wide cells; the day view's 13px would read as a rounding error. */
-.prm-cal-body[data-prm-scale="year"] .prm-cal-cell {
+.prm-calview .prm-cal-body[data-prm-scale="year"] .prm-cal-cell {
 	width: 3rem;
 	height: 1.6rem;
 }
@@ -684,12 +686,12 @@ a.prm-place:hover {
 	text-align: center;
 }
 
-.prm-cal-body[data-prm-scale="month"] .prm-cal-cell,
+.prm-calview .prm-cal-body[data-prm-scale="month"] .prm-cal-cell,
 .prm-cal-body[data-prm-scale="month"] .prm-cal-collabel {
 	width: 2.2rem;
 }
 
-.prm-cal-body[data-prm-scale="month"] .prm-cal-cell {
+.prm-calview .prm-cal-body[data-prm-scale="month"] .prm-cal-cell {
 	height: 1.3rem;
 }
 
