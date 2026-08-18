@@ -15,7 +15,7 @@ import type PrmPlugin from "./main";
 import { tierById } from "./settings";
 import type { PersonRecord, Tier } from "./types";
 import { addDays, formatDuration, isISODate, relativeToToday, todayISO } from "./dates";
-import { buildCalendar } from "./calendar";
+import { trailingMonths } from "./calendar";
 import { loopFile, readLoops } from "./loops";
 
 /**
@@ -889,8 +889,9 @@ export class PersonActionsModal extends Modal {
 
 		this.titleEl.setText(record.name);
 
-		const header = contentEl.createDiv({ cls: "prm-reachout-header" });
-		const nameRow = header.createDiv({ cls: "prm-reachout-namerow" });
+		const header = contentEl.createDiv({ cls: "prm-reachout-header prm-panel-header" });
+		const info = header.createDiv({ cls: "prm-panel-info" });
+		const nameRow = info.createDiv({ cls: "prm-reachout-namerow" });
 		renderTierChip(nameRow, tier);
 		if (record.status === "overdue") {
 			nameRow.createSpan({
@@ -918,7 +919,7 @@ export class PersonActionsModal extends Modal {
 			nameRow.createSpan({ cls: "prm-chip prm-chip-muted", text: `#${tag}` });
 		}
 
-		const meta = header.createDiv({ cls: "prm-reachout-meta" });
+		const meta = info.createDiv({ cls: "prm-reachout-meta" });
 		meta.createSpan({ text: lastContactLabel(record) });
 		// Their actual rhythm, which is the thing the "drifting" chip is measured
 		// against — and often disagrees with the cadence you assigned.
@@ -931,7 +932,7 @@ export class PersonActionsModal extends Modal {
 		if (record.relationship) meta.createSpan({ text: record.relationship });
 		if (record.location) meta.createSpan({ cls: "prm-place", text: record.location });
 
-		this.renderCalendar(contentEl.createDiv({ cls: "prm-cal" }), record);
+		this.renderThumb(header, record);
 
 		const previewEl = contentEl.createDiv({ cls: "prm-preview prm-preview-fit" });
 		const file = this.app.vault.getAbstractFileByPath(record.path);
@@ -1002,83 +1003,45 @@ export class PersonActionsModal extends Modal {
 	}
 
 	/**
-	 * A year of contact, as a calendar.
+	 * A year of contact as a thumbnail, in the corner of the header.
 	 *
-	 * The shape is the thing a rhythm figure can't express: three dense months
-	 * followed by nothing looks identical to "every day" in the numbers, and
-	 * completely different here.
+	 * The full grid was doing too much here: 53 columns don't fit a modal without
+	 * either overflowing it or crushing the cells, and it pushed the note preview
+	 * and the notes box out of view. Twelve monthly bars carry the one thing worth
+	 * seeing at a glance — whether contact is steady, ramping or stopped — and the
+	 * whole thing opens the real calendar for the detail.
 	 */
-	private renderCalendar(host: HTMLElement, record: PersonRecord): void {
-		host.empty();
+	private renderThumb(host: HTMLElement, record: PersonRecord): void {
 		if (record.contactDates.length === 0) return;
 
-		// The same builder the calendar view uses, at day scale for one person, so
-		// the two can't disagree about which day sits in which column.
 		const interactions = new Map(record.contactDates.map((d) => [d, [record.path]]));
-		const grid = buildCalendar(interactions, "day", todayISO(), {
-			weeks: 53,
-			weekStart: Number(this.plugin.settings.calendarWeekStart) || 0,
-		});
+		const months = trailingMonths(interactions, todayISO(), 12);
+		const peak = months.reduce((most, m) => Math.max(most, m.count), 0);
 
-		const head = host.createDiv({ cls: "prm-cal-head" });
-		head.createSpan({ cls: "prm-note-label", text: "Contact" });
-		const summary = head.createEl("a", {
-			cls: "prm-cal-more",
-			text:
-				grid.older > 0
-					? `${grid.inRange} in the last year, ${grid.older} before that`
-					: `${grid.inRange} in the last year`,
-		});
-		summary.setAttribute("aria-label", "Open the full calendar for this person");
-		summary.onclick = (evt) => {
+		const link = host.createEl("a", { cls: "prm-thumb" });
+		link.setAttribute("aria-label", "Open the contact calendar for this person");
+		link.title = "Contact over the last 12 months — click for the full calendar";
+		link.onclick = (evt) => {
 			evt.preventDefault();
 			void this.plugin.openCalendar(record.path);
 			this.close();
 		};
 
-		// Transposed against the view's layout: weeks read as columns here, which is
-		// the compact shape that fits a modal.
-		const gridEl = host.createDiv({ cls: "prm-cal-grid" });
-		const columns = grid.rows[0]?.cells.length ?? 0;
-		for (let col = 0; col < columns; col++) {
-			const week = gridEl.createDiv({ cls: "prm-cal-week" });
-			for (const row of grid.rows) {
-				const cell = row.cells[col];
-				if (!cell) {
-					week.createDiv({ cls: "prm-cal-day" });
-					continue;
-				}
-				const el = week.createDiv({
-					cls: cell.future
-						? "prm-cal-day prm-cal-future"
-						: cell.count > 0
-							? "prm-cal-day prm-cal-on"
-							: "prm-cal-day",
-				});
-				if (cell.future) continue;
-				el.setAttribute("aria-label", cell.key);
-				el.title = cell.count > 0 ? `${cell.key} — contact` : cell.key;
-				if (cell.count === 0) continue;
-
-				// A filled day knows where it came from, so it can be opened.
-				const source = record.sources.get(cell.key);
-				if (source === undefined) continue;
-				el.addClass("prm-cal-link");
-				el.onclick = () => {
-					const file = this.app.vault.getAbstractFileByPath(source);
-					if (file instanceof TFile) void this.app.workspace.getLeaf(false).openFile(file);
-					this.close();
-				};
-			}
+		const bars = link.createDiv({ cls: "prm-thumb-bars" });
+		for (const month of months) {
+			const bar = bars.createDiv({ cls: "prm-thumb-bar" });
+			// A month with any contact keeps a visible floor, so "a little" never
+			// renders as "none".
+			const height = month.count === 0 ? 0 : Math.max(12, (month.count / peak) * 100);
+			bar.style.setProperty("--prm-thumb-h", `${height}%`);
+			bar.title = `${month.label} — ${month.count}`;
+			if (month.count === 0) bar.addClass("prm-thumb-empty");
 		}
 
-		const labels = host.createDiv({ cls: "prm-cal-months" });
-		// Positioned by column so the labels line up with the grid they describe.
-		grid.columnLabels.forEach((label, column) => {
-			if (label.length === 0) return;
-			const el = labels.createSpan({ cls: "prm-cal-month", text: label });
-			el.style.setProperty("--prm-cal-col", String(column));
-		});
+		const caption = link.createSpan({ cls: "prm-thumb-caption" });
+		const inYear = months.reduce((sum, m) => sum + m.count, 0);
+		const older = record.contactDates.length - inYear;
+		caption.setText(older > 0 ? `${inYear} this year · ${older} before` : `${inYear} this year`);
 	}
 
 	/**

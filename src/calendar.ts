@@ -284,6 +284,33 @@ function yearGrid(
 	return { rows: [{ label: "", cells }], columnLabels: years };
 }
 
+/**
+ * The trailing `count` months ending this month, oldest first.
+ *
+ * A rolling window rather than calendar-year rows: for a thumbnail, "the last
+ * twelve months" is the useful frame, and January shouldn't restart the picture.
+ */
+export function trailingMonths(
+	interactions: Interactions,
+	today: string,
+	count = 12,
+): { key: string; label: string; count: number }[] {
+	const totals = totalsFor(interactions, "month");
+	const year = Number(today.slice(0, 4));
+	const month = Number(today.slice(5, 7));
+
+	const out: { key: string; label: string; count: number }[] = [];
+	for (let back = count - 1; back >= 0; back--) {
+		// Month arithmetic in one place, so a December rollover can't be got wrong.
+		const index = year * 12 + (month - 1) - back;
+		const y = Math.floor(index / 12);
+		const m = (index % 12) + 1;
+		const key = `${y}-${String(m).padStart(2, "0")}`;
+		out.push({ key, label: `${MONTHS[m - 1]} ${y}`, count: totals.get(key)?.count ?? 0 });
+	}
+	return out;
+}
+
 /** Shade level 0-4 for a count, GitHub-style. */
 export function shade(count: number, max: number): number {
 	if (count <= 0) return 0;

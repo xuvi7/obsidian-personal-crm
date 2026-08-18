@@ -435,84 +435,67 @@ a.prm-place:hover {
 	text-decoration: underline;
 }
 
-/* -------------------------------------------------------------- contact calendar */
+/* ------------------------------------------------------------ panel thumbnail */
 
-.prm-cal {
-	margin-top: 0.7rem;
-}
-
-.prm-cal-head {
+/* Facts on the left, a year of contact on the right. */
+.prm-panel-header {
 	display: flex;
-	align-items: baseline;
+	align-items: flex-start;
 	justify-content: space-between;
-	gap: 0.5rem;
-	margin-bottom: 0.3rem;
+	gap: 0.75rem;
 }
 
-/* Columns of seven days, scrolling horizontally on a narrow pane rather than
-   squeezing the cells to nothing. */
-.prm-cal-grid {
-	display: flex;
-	gap: 2px;
-	overflow-x: auto;
-	overscroll-behavior-x: contain;
-	padding-bottom: 2px;
+.prm-panel-info {
+	min-width: 0;
+	flex: 1 1 auto;
 }
 
-.prm-cal-week {
+.prm-thumb {
+	flex: 0 0 auto;
 	display: flex;
 	flex-direction: column;
+	align-items: flex-end;
 	gap: 2px;
-	flex: 0 0 auto;
+	padding: 0.2rem 0.3rem;
+	border-radius: var(--radius-s);
+	text-decoration: none;
+	cursor: pointer;
 }
 
-.prm-cal-day {
-	width: 9px;
-	height: 9px;
-	border-radius: 2px;
-	background: var(--background-modifier-border);
+.prm-thumb:hover {
+	background: var(--background-modifier-hover);
 }
 
-.prm-cal-on {
+/* Bars grow from the baseline, so a ramp reads as a ramp. */
+.prm-thumb-bars {
+	display: flex;
+	align-items: flex-end;
+	gap: 2px;
+	height: 28px;
+}
+
+.prm-thumb-bar {
+	width: 5px;
+	height: var(--prm-thumb-h, 0%);
+	min-height: 1px;
+	border-radius: 1px;
 	background: var(--interactive-accent);
 }
 
-/* Days after today are structure, not absence: don't draw them as empty days. */
-.prm-cal-future {
-	background: transparent;
+/* An empty month still needs to occupy its slot, or the axis lies about time. */
+.prm-thumb-empty {
+	height: 2px;
+	background: var(--background-modifier-border);
 }
 
-.prm-cal-link {
-	cursor: pointer;
-}
-
-.prm-cal-link:hover {
-	outline: 1px solid var(--text-normal);
-}
-
-.prm-cal-months {
-	position: relative;
-	height: 1em;
-	margin-top: 2px;
-	font-size: var(--font-ui-smaller);
+.prm-thumb-caption {
 	color: var(--text-faint);
-}
-
-/* Each label sits over its own column: 9px cell + 2px gap. */
-.prm-cal-month {
-	position: absolute;
-	left: calc(var(--prm-cal-col) * 11px);
-}
-
-.prm-cal-more {
-	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
-	cursor: pointer;
+	white-space: nowrap;
 }
 
-.prm-cal-more:hover {
+.prm-thumb:hover .prm-thumb-caption {
 	color: var(--text-accent);
-	text-decoration: underline;
 }
 
 /* --------------------------------------------------------------- calendar view */
@@ -636,11 +619,26 @@ a.prm-place:hover {
 	outline: 2px solid var(--text-accent);
 }
 
-/* Four steps rather than a gradient: a count you can read off the shade. */
+/* Four steps rather than a gradient: a count you can read off the shade.
+   Each level declares a solid accent first and the blend second, so a renderer
+   without color-mix() shows a visible cell rather than an invisible grid. */
 .prm-cal-l0 { background: var(--background-modifier-border); }
-.prm-cal-l1 { background: color-mix(in srgb, var(--interactive-accent) 30%, var(--background-modifier-border)); }
-.prm-cal-l2 { background: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border)); }
-.prm-cal-l3 { background: color-mix(in srgb, var(--interactive-accent) 78%, var(--background-modifier-border)); }
+
+.prm-cal-l1 {
+	background: var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 30%, var(--background-modifier-border));
+}
+
+.prm-cal-l2 {
+	background: var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+}
+
+.prm-cal-l3 {
+	background: var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 78%, var(--background-modifier-border));
+}
+
 .prm-cal-l4 { background: var(--interactive-accent); }
 
 /* After the levels on purpose: a future or missing period must not be shaded like

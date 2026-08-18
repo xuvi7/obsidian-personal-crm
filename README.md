@@ -228,8 +228,12 @@ than the range is reported as a count rather than quietly dropped.
 **One person…** narrows the whole view to a single history, which is what makes a
 drift verdict checkable: a dense block followed by empty weeks is a context that
 ended, while cells thinning out toward the right is a friendship actually cooling.
-The person panel carries a compact year of the same calendar, and its summary line
-opens the full view for that person.
+
+The person panel carries a **thumbnail** of the same data in its top corner —
+twelve monthly bars, enough to see whether contact is steady, ramping or stopped —
+and clicking it opens the full calendar for that person. The full grid used to live
+in the panel itself, which didn't fit: 53 columns either overflow a modal or crush
+the cells, and it pushed the note preview and notes box out of reach.
 
 ### Reach-outs in your daily note
 

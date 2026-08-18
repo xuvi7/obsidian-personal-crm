@@ -43,10 +43,20 @@ All notable changes to Personal CRM. Versions follow
   fall in the period, with a key; clicking one lists who, and clicking a name opens
   their note. **One person…** narrows the view to a single history. Reachable from
   the dashboard header or the `Open contact calendar` command.
-- The person panel carries a compact year of the same calendar, and its summary line
-  opens the full view for that person. No single number carries the shape of a
-  relationship — "daily for three months then nothing" and "every fortnight for
-  years, quiet lately" have the same rhythm figure and mean different things.
+- The person panel carries a **thumbnail** — twelve monthly bars in the top corner,
+  clickable to open the full calendar for that person. No single number carries the
+  shape of a relationship — "daily for three months then nothing" and "every
+  fortnight for years, quiet lately" have the same rhythm figure and mean different
+  things — and a thumbnail is enough to tell them apart.
+
+### Fixed
+
+- The person panel's calendar was a full 53-column grid, which overflowed the modal,
+  didn't line up with its edges, and pushed the note preview and notes box out of
+  reach. Replaced with the thumbnail above; the panel is ~150px shorter.
+- Calendar cells declare a solid colour before the `color-mix()` blend, so a
+  renderer without `color-mix()` support shows a visible grid rather than an
+  invisible one.
 - Year rows in the calendar are contiguous even where a year is empty, rather than
   listing only years with data; interactions older than the range are reported as a
   count instead of being dropped.
