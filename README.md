@@ -209,11 +209,27 @@ No single number can carry the shape of a relationship. "Daily for three months,
 then nothing" and "every fortnight for years, quiet lately" produce the same rhythm
 figure and mean completely different things.
 
-So the person panel draws a year of contact as a calendar, one cell per day, with a
-count of anything older. A dense block followed by empty weeks is instantly
-recognisable as a context that ended; evenly scattered cells thinning out at the
-right is a friendship actually cooling. Clicking a filled day opens the note the
-interaction came from.
+So there's a **Contact calendar** view — ribbon-adjacent button in the dashboard
+header, or the `Open contact calendar` command — with four scales:
+
+| Scale | Layout | Covers |
+| --- | --- | --- |
+| **Daily** | weekdays × weeks | the last year |
+| **Weekly** | years × weeks | six years |
+| **Monthly** | years × months | six years |
+| **Yearly** | one row of years | everything on record |
+
+Cells are shaded by how many interactions fall in the period, with a key in the
+header. Click one to see who, and click a name to open their note. Click the same
+period again to dismiss the detail. Year rows are contiguous even when a year is
+empty — a calendar that silently skips time isn't a calendar — and anything older
+than the range is reported as a count rather than quietly dropped.
+
+**One person…** narrows the whole view to a single history, which is what makes a
+drift verdict checkable: a dense block followed by empty weeks is a context that
+ended, while cells thinning out toward the right is a friendship actually cooling.
+The person panel carries a compact year of the same calendar, and its summary line
+opens the full view for that person.
 
 ### Reach-outs in your daily note
 
@@ -395,6 +411,7 @@ note** keeps it readable, at the cost of an unresolved link in your vault.
 ## Commands
 
 - Open dashboard
+- Open contact calendar
 - Who should I reach out to?
 - Triage unclassified people
 - Log contact with… / Log contact with this person (today)

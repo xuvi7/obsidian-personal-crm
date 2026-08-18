@@ -202,6 +202,13 @@ export class PrmDashboardView extends ItemView {
 
 		buttons.createDiv({ cls: "prm-header-divider" });
 
+		const calendar = buttons.createEl("button", { cls: "clickable-icon" });
+		setIcon(calendar, "calendar-days");
+		calendar.setAttribute("aria-label", "Contact calendar");
+		calendar.onclick = () => void this.plugin.openCalendar();
+
+		buttons.createDiv({ cls: "prm-header-divider" });
+
 		const undoEntry = this.plugin.undo.peekUndo();
 		const undoBtn = buttons.createEl("button", { cls: "clickable-icon" });
 		setIcon(undoBtn, "undo-2");

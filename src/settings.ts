@@ -59,6 +59,12 @@ export interface PrmSettings {
 	 */
 	alwaysLinkLogDate: boolean;
 
+	/**
+	 * First row of the calendar's day view: "0" = Sunday, "1" = Monday. A string
+	 * because that is what a dropdown stores; coerced at the one place it's used.
+	 */
+	calendarWeekStart: string;
+
 	/** Write today's reach-outs into a dated note when one is created. */
 	dailyNudge: boolean;
 	/** Heading the reach-out block is written under. */
@@ -125,6 +131,7 @@ export const DEFAULT_SETTINGS: PrmSettings = {
 
 	countPersonNoteDateLinks: true,
 	alwaysLinkLogDate: false,
+	calendarWeekStart: "0",
 
 	dailyNudge: false,
 	dailyNudgeHeading: "Reach out",
@@ -688,6 +695,16 @@ export class PrmSettingTab extends PluginSettingTab {
 				desc: "A log line's [[2026-07-04]], and equally \u201cwe talked on [[2026-01-24]]\u201d — both say something happened that day. Set prm-ignore-journal on a person to opt them out.",
 				aliases: ["backlink", "date link", "log", "history"],
 				control: { type: "toggle", key: "countPersonNoteDateLinks" },
+			},
+			{
+				name: "Weeks start on",
+				desc: "The first row of the calendar's daily view.",
+				aliases: ["calendar", "monday", "sunday"],
+				control: {
+					type: "dropdown",
+					key: "calendarWeekStart",
+					options: { "0": "Sunday", "1": "Monday" },
+				},
 			},
 			{
 				name: "Track follow-ups",

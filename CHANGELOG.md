@@ -37,11 +37,19 @@ All notable changes to Personal CRM. Versions follow
   burst of daily mentions isn't mistaken for a daily rhythm and produces no verdict.
 - A **Drifting** tab, a chip on the row, and the measured rhythm shown in the
   person panel next to the cadence you set.
-- **A contact calendar in the person panel**: a year of interactions, one cell per
-  day, with a count of anything older. No single number carries the shape of a
+- **A Contact calendar view**, with **daily, weekly, monthly and yearly** scales:
+  weekdays by weeks over a year, years by weeks or months over six years, or one row
+  of years covering everything on record. Cells are shaded by how many interactions
+  fall in the period, with a key; clicking one lists who, and clicking a name opens
+  their note. **One person…** narrows the view to a single history. Reachable from
+  the dashboard header or the `Open contact calendar` command.
+- The person panel carries a compact year of the same calendar, and its summary line
+  opens the full view for that person. No single number carries the shape of a
   relationship — "daily for three months then nothing" and "every fortnight for
-  years, quiet lately" have the same rhythm figure and mean different things — and
-  the difference is obvious here. Clicking a filled day opens the note it came from.
+  years, quiet lately" have the same rhythm figure and mean different things.
+- Year rows in the calendar are contiguous even where a year is empty, rather than
+  listing only years with data; interactions older than the range are reported as a
+  count instead of being dropped.
 - **Reach-outs written into your daily note**, off by default. When a dated note
   for today is created, who's overdue goes in as unchecked tasks under a heading
   you choose. A link in an open task already doesn't count as contact, so the nudge
@@ -105,8 +113,12 @@ All notable changes to Personal CRM. Versions follow
 
 ### Performance
 
-- The contact calendar costs ~0.1 ms to compute and ~1.3 ms to insert its 371
-  cells, once, when a panel opens.
+- Selecting a period in the calendar updates an outline and the detail panel rather
+  than rebuilding the grid: 0.1 ms against a 1.7 ms full render, and the gap widens
+  with vault size since a rebuild re-buckets every interaction. The interaction map
+  is cached until the index changes.
+- Bucketing is 0.2-1.0 ms per scale on a 2,868-interaction vault, and 3.9-11.8 ms at
+  200,000 interactions — paid only while the view is open.
 - `toUTC` gained a fast path for canonical `YYYY-MM-DD` dates, skipping a regex on
   every date comparison in the plugin — and the rhythm calculation alone makes tens
   per person. Combined with converting each date once instead of twice, measuring a

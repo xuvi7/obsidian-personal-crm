@@ -504,6 +504,203 @@ a.prm-place:hover {
 	left: calc(var(--prm-cal-col) * 11px);
 }
 
+.prm-cal-more {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+
+.prm-cal-more:hover {
+	color: var(--text-accent);
+	text-decoration: underline;
+}
+
+/* --------------------------------------------------------------- calendar view */
+
+.prm-calview {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	padding: 0.6rem 0.75rem;
+	gap: 0.5rem;
+}
+
+.prm-cal-chrome {
+	flex: 0 0 auto;
+}
+
+.prm-cal-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.prm-cal-controls {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+.prm-chip-x {
+	display: inline-flex;
+	margin-left: 0.25rem;
+	opacity: 0.7;
+}
+
+/* A key for the shading, in the summary line where the counts are. */
+.prm-cal-legend {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	margin-left: auto;
+}
+
+.prm-cal-legend .prm-cal-cell {
+	width: 10px;
+	height: 10px;
+	cursor: default;
+}
+
+.prm-cal-summary {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	margin-top: 0.35rem;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+/* Sized to its content, not to the leaf: the daily grid is ~130px tall, and
+   stretching it would leave a dead gap between the grid and the detail panel.
+   Shrinks and scrolls instead when the pane is too small for it. */
+.prm-cal-body {
+	flex: 0 1 auto;
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+
+.prm-cal-table {
+	display: inline-flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.prm-cal-row,
+.prm-cal-colrow {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.prm-cal-rowlabel {
+	flex: 0 0 auto;
+	width: 2.4rem;
+	text-align: right;
+	padding-right: 0.3rem;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+.prm-cal-collabel {
+	flex: 0 0 auto;
+	width: 13px;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	overflow: visible;
+}
+
+/* A button, so a period is reachable and operable from the keyboard. */
+.prm-cal-cell {
+	flex: 0 0 auto;
+	width: 13px;
+	height: 13px;
+	padding: 0;
+	border: none;
+	border-radius: 2px;
+	cursor: pointer;
+	background: var(--background-modifier-border);
+	box-shadow: none;
+}
+
+.prm-cal-cell:hover:not(:disabled) {
+	outline: 1px solid var(--text-normal);
+}
+
+.prm-cal-selected {
+	outline: 2px solid var(--text-accent);
+}
+
+/* Four steps rather than a gradient: a count you can read off the shade. */
+.prm-cal-l0 { background: var(--background-modifier-border); }
+.prm-cal-l1 { background: color-mix(in srgb, var(--interactive-accent) 30%, var(--background-modifier-border)); }
+.prm-cal-l2 { background: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border)); }
+.prm-cal-l3 { background: color-mix(in srgb, var(--interactive-accent) 78%, var(--background-modifier-border)); }
+.prm-cal-l4 { background: var(--interactive-accent); }
+
+/* After the levels on purpose: a future or missing period must not be shaded like
+   a period that simply had no contact. */
+.prm-cal-hole,
+.prm-cal-future,
+.prm-cal-future.prm-cal-l0 {
+	background: transparent;
+	cursor: default;
+}
+
+/* Year view has few, wide cells; the day view's 13px would read as a rounding error. */
+.prm-cal-body[data-prm-scale="year"] .prm-cal-cell {
+	width: 3rem;
+	height: 1.6rem;
+}
+
+.prm-cal-body[data-prm-scale="year"] .prm-cal-collabel {
+	width: 3rem;
+	text-align: center;
+}
+
+.prm-cal-body[data-prm-scale="month"] .prm-cal-cell,
+.prm-cal-body[data-prm-scale="month"] .prm-cal-collabel {
+	width: 2.2rem;
+}
+
+.prm-cal-body[data-prm-scale="month"] .prm-cal-cell {
+	height: 1.3rem;
+}
+
+/* Directly under the grid rather than pinned to the bottom of the pane: the empty
+   space belongs after the content, not between the cell and what it says. */
+.prm-cal-detail {
+	flex: 0 1 auto;
+	max-height: 40%;
+	overflow-y: auto;
+	padding-top: 0.4rem;
+	border-top: 1px solid var(--background-modifier-border);
+	font-size: var(--font-ui-small);
+}
+
+.prm-cal-detail-head {
+	display: flex;
+	align-items: baseline;
+	gap: 0.5rem;
+	margin-bottom: 0.3rem;
+}
+
+.prm-cal-people {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem 0.6rem;
+}
+
+.prm-cal-person {
+	color: var(--text-accent);
+	cursor: pointer;
+}
+
 /* ------------------------------------------------------------------ follow-ups */
 
 .prm-chip-drift {

@@ -8,6 +8,7 @@ import {
 } from "./settings";
 import { PrmEngine } from "./engine";
 import { PRM_VIEW_TYPE, PrmDashboardView } from "./view";
+import { PRM_CALENDAR_VIEW_TYPE, PrmCalendarView } from "./calendar-view";
 import {
 	CreatePersonModal,
 	LogContactModal,
@@ -75,6 +76,7 @@ export default class PrmPlugin extends Plugin {
 		this.undo = new UndoManager(this.app, this.writes);
 
 		this.registerView(PRM_VIEW_TYPE, (leaf) => new PrmDashboardView(leaf, this));
+		this.registerView(PRM_CALENDAR_VIEW_TYPE, (leaf) => new PrmCalendarView(leaf, this));
 		this.addSettingTab(new PrmSettingTab(this.app, this));
 
 		this.addRibbonIcon("users", "Personal CRM", () => void this.openDashboard());
@@ -367,6 +369,12 @@ export default class PrmPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "open-calendar",
+			name: "Open contact calendar",
+			callback: () => void this.openCalendar(),
+		});
+
+		this.addCommand({
 			id: "whos-in",
 			name: "Who's in…",
 			callback: () => {
@@ -443,6 +451,29 @@ export default class PrmPlugin extends Plugin {
 		const leaf = this.app.workspace.getLeaf("tab");
 		await leaf.setViewState({ type: PRM_VIEW_TYPE, active: true });
 		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	/** Open the calendar, optionally focused on one person. */
+	async openCalendar(path: string | null = null): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(PRM_CALENDAR_VIEW_TYPE);
+		const leaf = existing[0] ?? this.app.workspace.getLeaf("tab");
+		if (existing.length === 0) {
+			await leaf.setViewState({ type: PRM_CALENDAR_VIEW_TYPE, active: true });
+		}
+		await this.app.workspace.revealLeaf(leaf);
+		const view = leaf.view;
+		// Focus after revealing, so the first render already has the right scope.
+		if (view instanceof PrmCalendarView && path !== null) view.showPerson(path);
+	}
+
+	/** Choose whose history the calendar shows. */
+	pickPersonForCalendar(): void {
+		new PersonPickerModal(
+			this,
+			this.engine.all(),
+			(record) => void this.openCalendar(record.path),
+			"Whose history?",
+		).open();
 	}
 
 	/**

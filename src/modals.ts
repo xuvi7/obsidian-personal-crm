@@ -15,7 +15,7 @@ import type PrmPlugin from "./main";
 import { tierById } from "./settings";
 import type { PersonRecord, Tier } from "./types";
 import { addDays, formatDuration, isISODate, relativeToToday, todayISO } from "./dates";
-import { buildHeatmap } from "./heatmap";
+import { buildCalendar } from "./calendar";
 import { loopFile, readLoops } from "./loops";
 
 /**
@@ -1012,38 +1012,56 @@ export class PersonActionsModal extends Modal {
 		host.empty();
 		if (record.contactDates.length === 0) return;
 
-		const today = todayISO();
-		const map = buildHeatmap(record.contactDates, today, 53);
+		// The same builder the calendar view uses, at day scale for one person, so
+		// the two can't disagree about which day sits in which column.
+		const interactions = new Map(record.contactDates.map((d) => [d, [record.path]]));
+		const grid = buildCalendar(interactions, "day", todayISO(), {
+			weeks: 53,
+			weekStart: Number(this.plugin.settings.calendarWeekStart) || 0,
+		});
 
 		const head = host.createDiv({ cls: "prm-cal-head" });
 		head.createSpan({ cls: "prm-note-label", text: "Contact" });
-		const older = record.contactDates.length - map.inWindow;
-		head.createSpan({
-			cls: "prm-muted",
+		const summary = head.createEl("a", {
+			cls: "prm-cal-more",
 			text:
-				older > 0
-					? `${map.inWindow} in the last year, ${older} before that`
-					: `${map.inWindow} in the last year`,
+				grid.older > 0
+					? `${grid.inRange} in the last year, ${grid.older} before that`
+					: `${grid.inRange} in the last year`,
 		});
+		summary.setAttribute("aria-label", "Open the full calendar for this person");
+		summary.onclick = (evt) => {
+			evt.preventDefault();
+			void this.plugin.openCalendar(record.path);
+			this.close();
+		};
 
-		const grid = host.createDiv({ cls: "prm-cal-grid" });
-		for (const week of map.weeks) {
-			const col = grid.createDiv({ cls: "prm-cal-week" });
-			for (const cell of week) {
-				const el = col.createDiv({
-					cls: cell.contacted
-						? "prm-cal-day prm-cal-on"
-						: cell.future
-							? "prm-cal-day prm-cal-future"
+		// Transposed against the view's layout: weeks read as columns here, which is
+		// the compact shape that fits a modal.
+		const gridEl = host.createDiv({ cls: "prm-cal-grid" });
+		const columns = grid.rows[0]?.cells.length ?? 0;
+		for (let col = 0; col < columns; col++) {
+			const week = gridEl.createDiv({ cls: "prm-cal-week" });
+			for (const row of grid.rows) {
+				const cell = row.cells[col];
+				if (!cell) {
+					week.createDiv({ cls: "prm-cal-day" });
+					continue;
+				}
+				const el = week.createDiv({
+					cls: cell.future
+						? "prm-cal-day prm-cal-future"
+						: cell.count > 0
+							? "prm-cal-day prm-cal-on"
 							: "prm-cal-day",
 				});
-				if (cell.date === null || cell.future) continue;
-				el.setAttribute("aria-label", cell.date);
-				el.title = cell.contacted ? `${cell.date} — contact` : cell.date;
-				if (!cell.contacted) continue;
+				if (cell.future) continue;
+				el.setAttribute("aria-label", cell.key);
+				el.title = cell.count > 0 ? `${cell.key} — contact` : cell.key;
+				if (cell.count === 0) continue;
 
 				// A filled day knows where it came from, so it can be opened.
-				const source = record.sources.get(cell.date);
+				const source = record.sources.get(cell.key);
 				if (source === undefined) continue;
 				el.addClass("prm-cal-link");
 				el.onclick = () => {
@@ -1056,10 +1074,11 @@ export class PersonActionsModal extends Modal {
 
 		const labels = host.createDiv({ cls: "prm-cal-months" });
 		// Positioned by column so the labels line up with the grid they describe.
-		for (const { column, label } of map.monthLabels) {
+		grid.columnLabels.forEach((label, column) => {
+			if (label.length === 0) return;
 			const el = labels.createSpan({ cls: "prm-cal-month", text: label });
 			el.style.setProperty("--prm-cal-col", String(column));
-		}
+		});
 	}
 
 	/**
