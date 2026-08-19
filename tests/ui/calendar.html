@@ -11,12 +11,27 @@
     --text-normal: #dcddde; --text-muted: #999; --text-faint: #666;
     --text-accent: #7f6df2; --text-error: #e5534b; --text-warning: #d29922;
     --interactive-accent: #7f6df2; --radius-s: 4px; --radius-m: 8px;
+    --size-4-3: 12px; --size-4-8: 32px; --safe-area-inset-bottom: 0px;
     --font-ui-small: 13px; --font-ui-smaller: 11px; --icon-s: 16px;
   }
   html, body { margin: 0; background: #111; color: var(--text-normal);
     font-family: -apple-system, system-ui, sans-serif; font-size: 14px; }
-  #leaf { position: absolute; inset: 16px; display: flex; flex-direction: column;
-    background: var(--background-primary); border: 1px solid #444; overflow: hidden; }
+  #leaf { position: absolute; inset: 16px;
+    background: var(--background-primary); border: 1px solid #444; }
+  /* Obsidian's REAL leaf rules, at their real specificity, from app.css:
+       .workspace-leaf-content               { overflow: hidden }
+       .workspace-leaf-content .view-content { (0,2,0)
+         padding: var(--size-4-3) var(--size-4-3) var(--size-4-8);
+         overflow: auto; }
+     A plugin's `.prm-view { padding: 0; overflow: hidden }` is (0,1,0) and loses BOTH.
+     This harness used to give .view-content no padding and clip on the wrapper instead,
+     which hid a real 24px loss of width and a real horizontal scrollbar. */
+  .workspace-leaf-content { overflow: hidden; position: relative;
+    display: flex; flex-direction: column; }
+  .workspace-leaf-content .view-content {
+    padding: var(--size-4-3) var(--size-4-3) var(--size-4-8);
+    padding-bottom: max(var(--safe-area-inset-bottom), var(--size-4-8));
+    overflow: auto; }
   .view-content { flex: 1 1 auto; min-height: 0; }
   /* Obsidian's real button rules, verbatim in structure, from app.css:
        `button` (0,0,1) sets padding/height/radius — any plugin class outranks it.
@@ -32,7 +47,7 @@
   .prm-tab-active { background: var(--background-modifier-hover); font-weight: 600; }
   .svg-icon { width: 12px; height: 12px; vertical-align: middle; }
 </style>
-<div id="leaf"><div class="view-content" id="content"></div></div>
+<div id="leaf" class="workspace-leaf-content"><div class="view-content" id="content"></div></div>
 <script>
 function applyOpts(el, o) {
   if (!o) return el;
