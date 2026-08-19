@@ -200,6 +200,55 @@ async function bootView() {
     });
   }
 
+  console.log("\nThe view controls its own overflow and padding");
+  {
+    // Obsidian's `.workspace-leaf-content .view-content` is (0,2,0) and sets BOTH
+    // `padding: 12px 12px 32px` and `overflow: auto`. `.prm-view` is (0,1,0) and lost
+    // both, which is what made the whole pane scroll sideways on a phone: 24px of the
+    // width was gone and the overflow it caused scrolled instead of showing.
+    const depth = (sel) => (sel.match(/\.[a-z-]+|:not\([^)]*\)|\[[^\]]*\]/g) || []).length;
+    const OBSIDIAN = ".workspace-leaf-content .view-content";   // (0,2,0)
+
+    check("the overflow reclaim outranks Obsidian's view-content rule", () => {
+      const i = CSS.indexOf(".workspace-leaf-content .view-content.prm-view");
+      assert.ok(i !== -1, "the overflow-reclaiming selector is gone");
+      const sel = CSS.slice(i).split("{")[0].split(",")[0].trim();
+      assert.ok(depth(sel) > depth(OBSIDIAN),
+        `${sel} (${depth(sel)}) does not outrank ${OBSIDIAN} (${depth(OBSIDIAN)})`);
+      const body = CSS.slice(CSS.indexOf("{", i), CSS.indexOf("}", i));
+      assert.ok(/overflow:\s*hidden/.test(body), "not reclaiming overflow: " + body);
+    });
+
+    check("a phone reclaims the horizontal padding too", () => {
+      const i = CSS.indexOf("body.is-phone .workspace-leaf-content .view-content.prm-view");
+      assert.ok(i !== -1, "the phone padding reset is gone");
+      const body = CSS.slice(CSS.indexOf("{", i), CSS.indexOf("}", i));
+      assert.ok(/padding-inline:\s*0/.test(body), "not zeroing the sides: " + body);
+      // The home indicator sits over the last row without this.
+      assert.ok(/safe-area-inset-bottom/.test(body), "safe area dropped: " + body);
+    });
+
+    check("the phone header row wraps rather than forcing the pane wider", () => {
+      // Seven 44px buttons want ~332px; a 320px phone has to wrap. `nowrap` here is
+      // what pushed the row past the pane and made the view scroll.
+      const i = CSS.indexOf("body.is-phone .prm-header-buttons {");
+      assert.ok(i !== -1);
+      const body = CSS.slice(CSS.indexOf("{", i), CSS.indexOf("}", i));
+      assert.ok(/flex-wrap:\s*wrap/.test(body), "still nowrap: " + body);
+    });
+
+    check("the list padding covers the checkbox's hit overlay", () => {
+      // The 44px overlay reaches 11px past the 22px box; less padding than that lets it
+      // poke outside the pane and widen the scroll area.
+      const i = CSS.indexOf("body.is-phone .prm-list {");
+      assert.ok(i !== -1);
+      const body = CSS.slice(CSS.indexOf("{", i), CSS.indexOf("}", i));
+      const m = /padding:\s*0\s+(\d+)px/.exec(body);
+      assert.ok(m, "side padding is not a px value: " + body);
+      assert.ok(Number(m[1]) >= 11, `${m[1]}px is under the overlay's 11px reach`);
+    });
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
 })();

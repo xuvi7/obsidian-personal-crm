@@ -1475,6 +1475,21 @@ a.prm-place:hover {
 	}
 }
 
+/*
+ * Obsidian's own `.workspace-leaf-content .view-content` (0,2,0) sets
+ * `padding: 12px 12px 32px` and `overflow: auto`, and a plugin's `.prm-view` (0,1,0)
+ * loses both — so the padding at the top of this file never applied, and the view
+ * scrolled instead of clipping. `.view-content.prm-view` under the leaf is (0,3,0) and
+ * settles it. Only `overflow` is reclaimed globally: the fixed-chrome/scrolling-list
+ * design depends on the view never scrolling, and horizontal overflow should be a
+ * visible bug rather than a scrollbar. The 12px padding is left alone off mobile,
+ * because that is what the desktop layout has always been drawn with.
+ */
+.workspace-leaf-content .view-content.prm-view,
+.workspace-leaf-content .view-content.prm-calview {
+	overflow: hidden;
+}
+
 /* ============================================================== mobile / touch */
 /*
  * Obsidian puts `.is-mobile`, `.is-phone`, `.is-tablet` (and `.is-ios`/`.is-android`)
@@ -1620,6 +1635,20 @@ body.is-phone .prm-title {
 	display: none;
 }
 
+/*
+ * On a phone those 12px sides are 24px of a ~360px pane, and the seven-icon header row
+ * needs every one of them: at 44px each it wants ~332px and overflowed by 22px, which
+ * is what made the whole view scroll sideways. The plugin's own chrome and list padding
+ * provide the inset instead. Bottom padding keeps the safe-area inset, or the last row
+ * sits under the home indicator.
+ */
+body.is-phone .workspace-leaf-content .view-content.prm-view,
+body.is-phone .workspace-leaf-content .view-content.prm-calview {
+	padding-inline: 0;
+	padding-top: 0;
+	padding-bottom: var(--safe-area-inset-bottom, 0px);
+}
+
 body.is-phone .prm-chrome {
 	padding: 0.4rem 0.6rem 0;
 }
@@ -1637,8 +1666,10 @@ body.is-phone .prm-title-row {
 body.is-phone .prm-header-buttons {
 	gap: 0.25rem;
 	width: 100%;
-	flex-wrap: nowrap;
-	justify-content: space-between;
+	/* Seven 44px buttons need ~332px, which a 320px phone does not have. Wrapping to a
+	   second row costs 44px; forcing the width made the entire view scroll sideways. */
+	flex-wrap: wrap;
+	justify-content: flex-start;
 }
 
 body.is-phone .prm-btn-label {
@@ -1750,7 +1781,9 @@ body.is-mobile .prm-name-row {
 /* ------------------------------------------------------------------ phone rows */
 
 body.is-phone .prm-list {
-	padding: 0 0.6rem 2rem;
+	/* 12px, not 0.6rem: the checkbox's 44px hit overlay reaches 11px past its 22px box,
+	   and anything less lets it poke outside the pane and widen the scroll area. */
+	padding: 0 12px 2rem;
 }
 
 body.is-phone .prm-row {
