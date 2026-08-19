@@ -137,6 +137,35 @@ You can read the app's real CSS:
 strings -n 4 /Applications/Obsidian.app/Contents/Resources/obsidian.asar | grep -A 20 "^button {"
 ```
 
+### 4.1b Obsidian styles `.view-content` too, and outranks you there as well
+
+```css
+.workspace-leaf-content .view-content {            /* (0,2,0) */
+  padding: var(--size-4-3) var(--size-4-3) var(--size-4-8);   /* 12px 12px 32px */
+  padding-bottom: max(var(--safe-area-inset-bottom), var(--size-4-8));
+  overflow: auto;
+}
+```
+
+A custom view's root element **is** `.view-content`, so a plugin's `.prm-view` (0,1,0)
+loses both declarations. Consequences that went unnoticed for a long time:
+
+- The `padding: 0` at the top of this file never applied. The desktop layout has always
+  been drawn inside Obsidian's 12px — which is fine, and is deliberately left alone.
+- `overflow: hidden` never applied either, so the view scrolled instead of clipping. On a
+  phone the pane is 24px narrower than it looks, the seven-icon header row did not fit,
+  and the whole view scrolled sideways.
+
+`.workspace-leaf-content .view-content.prm-view` is (0,3,0) and settles it. Only `overflow`
+is reclaimed everywhere; the horizontal padding is reclaimed on `.is-phone` only, where the
+24px matters. Note Obsidian resets this itself for markdown views
+(`.workspace-leaf-content[data-type='markdown'] .view-content { padding: 0; overflow: hidden }`) —
+custom views do not get that.
+
+Clipping is only safe because every region that can grow has its own scroller:
+`.prm-list { overflow-y: auto }`, `.prm-cal-body { overflow: auto }`,
+`.prm-cal-detail { max-height: 40%; overflow-y: auto }`. Check that before adding another.
+
 ### 4.2 A failed `var()` goes transparent, not to a fallback
 
 `var()` substitution failure is invalid **at computed-value time**, which — unlike a
@@ -392,6 +421,7 @@ each hiding a real bug:
 | no `<meta name="viewport">` in the browser harnesses | mobile emulation used the legacy 980px layout viewport, so a "390px phone" laid out at 940px and no narrow rule fired |
 | `__matches` treating a space as part of a class name | `querySelectorAll(".prm-header-buttons button")` returned `[]`, and three assertions over the result passed against nothing |
 | `setIcon` as a no-op in the Node stub | "does this button have an icon?" was unanswerable, which matters once a phone hides the label |
+| a leaf with no padding, clipping on the wrapper instead of on `.view-content` | Obsidian's own 12px side padding and `overflow: auto` on `.view-content` — 24px of missing width, and the horizontal scrollbar it caused, invisible |
 
 The lesson: **when a stub reimplements host behaviour, copy the host's real shape** —
 including selector specificity. A harness that cannot fail is not evidence. If a user

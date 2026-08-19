@@ -35,6 +35,14 @@ All notable changes to Personal CRM. Versions follow
 
 ### Fixed
 
+- **The view no longer scrolls sideways on a phone.** Obsidian styles `.view-content`
+  itself — 12px of side padding and `overflow: auto` — with a selector that outranks
+  anything a plugin sets with one class, so the pane was 24px narrower than it looked and
+  the overflow that caused scrolled rather than showing. The plugin now wins that contest
+  for its own overflow, reclaims those 24px on phones, and lets the header's icon row wrap
+  instead of forcing the pane wider. Checked at every pane width from 320px to 430px.
+- The last row could sit under the home indicator on a notched phone; the safe-area inset
+  is honoured again.
 - The narrow-pane toolbar set `flex-direction: column` while still inheriting
   `flex-wrap: wrap` from the wide layout, and wrap in a column container makes items
   form extra *columns*: the toolbar was laid out at its 483px content width inside a
