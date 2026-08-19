@@ -319,28 +319,43 @@ and the whole toolbar (tabs, Select all, search, sort) hide instead, because non
 what you are using mid-selection, and the bar is one line:
 
 ```
-partial:   2 selected   [Select all]   [Actions ⋯]
-all:      30 selected   [Clear]        [Actions ⋯]
+phone:   [✕ 2 selected]   [⧩ Tracked]   [Actions ⋯]
+wide:    [✕ 2 selected]   [Select all]  [Log contact][Set cadence][Add tag]…
 ```
 
-Chrome 389px → 108px, so selecting shows **more** rows than not selecting (6 vs 5). Three
+Chrome 389px → 108px, so selecting shows **more** rows than not selecting (6 vs 5). Four
 things hold that together:
 
 - `renderBulkBar` toggles `.prm-selecting` on the view root. A class rather than `:has()`,
   so it cannot depend on selector support, set from the one place the selection size
   changes.
-- The count is the clear, and carries an `x` icon. The toggle beside it cannot serve as the
-  clear, because with a partial selection it reads "Select all" — so without this there is
-  no one-tap exit from a partial selection.
-- "Select all" is a no-op once everything listed is selected, so at that point the *same
-  slot* becomes "Clear" rather than sitting dead. That merge is what buys the single line.
+- **The count is the clear**, and carries an `x` icon. There is no separate Clear button on
+  any platform.
+- **Select all lives in the selection bar, not the toolbar.** The toolbar used to carry its
+  own, which meant two buttons with the same name — and the toolbar's is hidden on a phone
+  mid-selection anyway. It is *not* a dead slot to reuse when everything listed is already
+  selected: change the filter and the listed set changes under it.
+- **A filter button stands in for the hidden toolbar.** Hiding the toolbar took the tabs and
+  the search with it, and selecting across filters ("all of Due, then all of Drifting") is
+  the flow that makes Select all worth having. `FilterSheetModal` carries both, and the
+  button's label is the only thing left saying which filter is active — it turns the accent
+  colour when a search is also narrowing the list.
 
-The six actions are defined once as `BulkAction[]` and rendered twice — as the button row a
-wide pane shows, and as `BulkActionsModal`'s rows on a phone. **Both are always in the DOM
-and CSS picks one**, so a resize across the phone/tablet boundary (which Obsidian
-re-evaluates live, §4.9) cannot leave the bar in the other width's shape. The sheet is
-labelled, not icon-only, because `tag` and `tags` are near-identical glyphs and getting
-Add/Remove tag wrong edits every selected note.
+**A filter change must redraw the bulk bar.** The tab handler called `renderToolbar` and
+`renderList` but not `renderBulkBar`, so the bar's label went on describing the tab you had
+left. Everything that changes the listed set goes through `setFilter` or `setQuery`, both of
+which redraw all three.
+
+The actions are defined once as `BulkAction[]` and rendered twice — as the button row a wide
+pane shows, and as `BulkActionsModal`'s rows on a phone, where Select all leads them because
+its own button is hidden at that width. **Both renderings are always in the DOM and CSS
+picks one**, so a resize across the phone/tablet boundary (which Obsidian re-evaluates live,
+§4.9) cannot leave the bar in the other width's shape. The sheet is labelled, not icon-only,
+because `tag` and `tags` are near-identical glyphs and getting Add/Remove tag wrong edits
+every selected note.
+
+One consequence worth knowing: with the toolbar's Select all gone, selecting everything
+starts by ticking one row, on every platform. There is no bar until there is a selection.
 
 Two traps that are not about size:
 

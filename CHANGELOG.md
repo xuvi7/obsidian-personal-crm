@@ -20,15 +20,23 @@ All notable changes to Personal CRM. Versions follow
   buttons wrapped to three rows and sat *on top of* the filter chrome, so a selection took
   49% of the pane and left three people visible out of five. Selection is now a mode: the
   stats strip, filter tabs, search and sort hide — none of them is what you are using
-  mid-selection — and the bar is a single line reading `2 selected · Select all ·
-  Actions ⋯`. Chrome goes from 389px to 108px, so selecting shows *more* rows than not
-  selecting. Tapping the count clears the selection; "Select all" becomes "Clear" once
-  everything listed is selected, since it would otherwise be a button that does nothing.
-  "Actions ⋯" opens a sheet with all six actions at full width and labelled — an icon-only
-  bar would have made Add tag and Remove tag indistinguishable, as `tag` and `tags` are
-  near-identical glyphs. Tablets and desktops keep the button row.
+  mid-selection — and the bar is a single line: `✕ 2 selected · Tracked · Actions ⋯`.
+  Chrome goes from 389px to 108px, so selecting shows *more* rows than not selecting.
+  "Actions ⋯" opens a sheet with Select all and all six bulk actions at full width and
+  labelled — an icon-only bar would have made Add tag and Remove tag indistinguishable, as
+  `tag` and `tags` are near-identical glyphs. Tablets and desktops keep the button row.
+- **The filter button replaces what hiding the toolbar took away.** It names the active
+  filter, and opens a sheet with all seven filters and the search box — so you can still
+  select everyone in Due, switch to Drifting and select those too, which is the flow that
+  makes Select all worth having mid-selection. It turns the accent colour while a search is
+  narrowing the list.
 - On every platform, the bulk bar's separate "Clear" button is gone; the selection count
   now carries an ✕ and does the same job in less space.
+- **"Select all" has moved out of the toolbar and into the selection bar**, so there is only
+  one of them instead of two with the same name. It stays "Select all" in every state —
+  it is never redundant, because changing the filter changes what "all" means. One
+  consequence: selecting everything now starts by ticking a single row.
+
 - **A phone gets a much shorter header.** It was taking about 700px of an 804px pane,
   which left room for one and a half people: a title Obsidian's own view header already
   shows, two wrapped rows of buttons, two of stats, two of filter tabs, then the
@@ -48,6 +56,8 @@ All notable changes to Personal CRM. Versions follow
 
 ### Fixed
 
+- Changing the filter tab while people were selected left the selection bar describing the
+  tab you had left: the tab handler redrew the toolbar and the list but not the bar.
 - **The view no longer scrolls sideways on a phone.** Obsidian styles `.view-content`
   itself — 12px of side padding and `overflow: auto` — with a selector that outranks
   anything a plugin sets with one class, so the pane was 24px narrower than it looked and
