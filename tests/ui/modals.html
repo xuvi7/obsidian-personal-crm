@@ -156,6 +156,9 @@ document.getElementById("modal-host").insertAdjacentHTML("beforeend",
 // The same six actions the dashboard builds; labelled rather than icon-only because
 // `tag` and `tags` are near-identical glyphs.
 const BULK_ACTIONS = [
+  // Select all leads, exactly as the view passes it: the button for it is hidden at
+  // this width, so the sheet is the only place it exists on a phone.
+  { label: "Select all", icon: "list-checks", run: () => { window.__bulkRan = "Select all"; } },
   { label: "Log contact", icon: "check", run: () => { window.__bulkRan = "Log contact"; } },
   { label: "Set cadence", icon: "gauge", run: () => { window.__bulkRan = "Set cadence"; } },
   { label: "Add tag", icon: "tag", run: () => { window.__bulkRan = "Add tag"; } },
@@ -166,6 +169,23 @@ const BULK_ACTIONS = [
 const sheet = new PRMM.BulkActionsModal(plugin, 30, BULK_ACTIONS);
 sheet.open();
 window.__sheet = sheet;
+
+document.getElementById("modal-host").insertAdjacentHTML("beforeend",
+  '<div class="caption">Filter sheet — the tabs and the search box, which a phone hides while selecting</div>');
+const filterSheet = new PRMM.FilterSheetModal(plugin, {
+  filters: [
+    { key: "due", label: "Due" }, { key: "all", label: "Tracked" },
+    { key: "loops", label: "Follow-ups" }, { key: "drifting", label: "Drifting" },
+    { key: "unclassified", label: "Unclassified" }, { key: "birthdays", label: "Birthdays" },
+    { key: "paused", label: "Paused" },
+  ],
+  active: "drifting",
+  query: "",
+  onFilter: (k) => { window.__pickedFilter = k; },
+  onQuery: (q) => { window.__typedQuery = q; },
+});
+filterSheet.open();
+window.__filterSheet = filterSheet;
 
 window.__ready = true;
 </script>

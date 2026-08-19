@@ -5,6 +5,7 @@ export {
 export {
 	BulkActionsModal,
 	CreatePersonModal,
+	FilterSheetModal,
 	LogContactModal,
 	PersonActionsModal,
 	ReachOutModal,
