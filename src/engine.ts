@@ -385,6 +385,46 @@ export class PrmEngine {
 	}
 
 	/**
+	 * The person a link points at, or null.
+	 *
+	 * A hash lookup against the map built from the index, falling back to Obsidian
+	 * only where the map cannot answer: a name two people share, and the relative or
+	 * extension-bearing targets that markdown-style links produce.
+	 */
+	private resolvePersonLink(
+		rawLink: string,
+		fromPath: string,
+		linkMap: PersonLinkMap,
+	): string | null {
+		const linkpath = getLinkpath(rawLink);
+		const key = normalizeLinkKey(linkpath);
+
+		if (linkMap.ambiguous.has(key)) {
+			// Two people share this name; only Obsidian knows which is nearer.
+			return this.app.metadataCache.getFirstLinkpathDest(linkpath, fromPath)?.path ?? null;
+		}
+
+		const hit = linkMap.byName.get(key);
+		if (hit) return hit;
+
+		// A markdown link percent-encodes spaces, so `People/Bob%20Smith.md` never
+		// matches a key built from the real path.
+		if (key.includes("%")) {
+			try {
+				const decoded = linkMap.byName.get(normalizeLinkKey(decodeURIComponent(linkpath)));
+				if (decoded) return decoded;
+			} catch {
+				// Malformed escape: fall through to real resolution.
+			}
+		}
+
+		if (!needsRealResolution(linkpath)) return null;
+		const dest = this.app.metadataCache.getFirstLinkpathDest(linkpath, fromPath)?.path ?? null;
+		// Only report it if it is someone we index; the map is the authority on that.
+		return dest !== null && linkMap.byPath.has(dest) ? dest : null;
+	}
+
+	/**
 	 * Attribute a dated note's links to people.
 	 *
 	 * Uses `cache.links` rather than `resolvedLinks` so each link's position is
@@ -413,16 +453,7 @@ export class PrmEngine {
 				continue;
 			}
 
-			const linkpath = getLinkpath(link.link);
-			const key = normalizeLinkKey(linkpath);
-
-			// Resolve against a map built from the people index: a hash lookup rather
-			// than asking Obsidian to resolve every link in every dated note.
-			let targetPath = linkMap.byName.get(key);
-			if (linkMap.ambiguous.has(key)) {
-				// Two people share this name; only Obsidian knows which is nearer.
-				targetPath = this.app.metadataCache.getFirstLinkpathDest(linkpath, file.path)?.path;
-			}
+			const targetPath = this.resolvePersonLink(link.link, file.path, linkMap);
 			if (!targetPath) continue;
 
 			const record = people.get(targetPath);
@@ -488,12 +519,7 @@ export class PrmEngine {
 				const task = tasks[ti];
 				if (offset < task.start) continue;
 
-				const linkpath = getLinkpath(link.link);
-				const key = normalizeLinkKey(linkpath);
-				let targetPath = linkMap.byName.get(key);
-				if (linkMap.ambiguous.has(key)) {
-					targetPath = this.app.metadataCache.getFirstLinkpathDest(linkpath, file.path)?.path;
-				}
+				const targetPath = this.resolvePersonLink(link.link, file.path, linkMap);
 				if (!targetPath) continue;
 
 				const record = people.get(targetPath);
@@ -793,10 +819,24 @@ interface PersonLinkMap {
 	byName: Map<string, string>;
 	/** Names claimed by more than one person, which need real resolution. */
 	ambiguous: Set<string>;
+	/** Every indexed person's path, to vet what real resolution comes back with. */
+	byPath: Set<string>;
 }
 
 function normalizeLinkKey(value: string): string {
 	return value.trim().normalize("NFC").toLowerCase();
+}
+
+/**
+ * Whether a link that missed the map is worth asking Obsidian to resolve.
+ *
+ * A miss is overwhelmingly a link to something that isn't a person — a topic, a
+ * project — and resolving every one of those would add a call per link per dated
+ * note. Relative and extension-bearing targets are the shapes the map cannot
+ * express, so they are the only ones worth the call.
+ */
+function needsRealResolution(linkpath: string): boolean {
+	return linkpath.includes("/") || /\.md$/i.test(linkpath);
 }
 
 /**
@@ -818,10 +858,16 @@ function buildPersonLinkMap(people: Map<string, PersonRecord>): PersonLinkMap {
 	for (const [path, record] of people) {
 		add(record.name, path);
 		add(path.replace(/\.md$/i, ""), path);
+		// Also the forms that carry the extension. A markdown-style link — which is
+		// what Obsidian writes with "Use [[Wikilinks]]" off — targets `People/Bob.md`,
+		// and `[[Bob.md]]` is legal too. Without these the key never matches and the
+		// person's whole contact history reads as empty.
+		add(path, path);
+		add(record.name + ".md", path);
 		for (const alias of record.aliases) add(alias, path);
 	}
 
-	return { byName, ambiguous };
+	return { byName, ambiguous, byPath: new Set(people.keys()) };
 }
 
 /**

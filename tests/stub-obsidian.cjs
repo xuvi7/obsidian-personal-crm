@@ -282,6 +282,28 @@ function buildCache(content) {
     if (m[1] === "!") embeds.push(rec);
     else links.push(rec);
   }
+  // Markdown-style links, which is what Obsidian writes with "Use [[Wikilinks]]"
+  // off. Real Obsidian reports these in cache.links alongside wikilinks, with
+  // `link` holding the target exactly as written — percent-encoding included — and
+  // ![alt](x) going to embeds. External targets are not links at all.
+  const mdRe = /(!?)\[([^\]]*)\]\(([^)\s]+)\)/g;
+  for (const m of content.matchAll(mdRe)) {
+    let target = m[3];
+    if (target.startsWith("<") && target.endsWith(">")) target = target.slice(1, -1);
+    if (/^[a-z][a-z0-9+.-]*:/i.test(target)) continue;   // http:, mailto:, obsidian:
+    const rec = {
+      link: target,
+      displayText: m[2],
+      position: { start: { offset: m.index }, end: { offset: m.index + m[0].length } },
+    };
+    if (m[1] === "!") embeds.push(rec);
+    else links.push(rec);
+  }
+
+  // Document order, as Obsidian reports them; the open-loop walk relies on it.
+  links.sort((a, b) => a.position.start.offset - b.position.start.offset);
+  embeds.sort((a, b) => a.position.start.offset - b.position.start.offset);
+
   cache.links = links;
   cache.embeds = embeds;
 
