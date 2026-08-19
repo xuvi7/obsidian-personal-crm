@@ -151,5 +151,21 @@ document.getElementById("modal-host").insertAdjacentHTML("beforeend",
   '<div class="caption">Person panel — opened by clicking a row</div>');
 const panel = new PRMM.PersonActionsModal(plugin, record);
 panel.open();
+document.getElementById("modal-host").insertAdjacentHTML("beforeend",
+  '<div class="caption">Bulk actions sheet — what a phone opens instead of the button row</div>');
+// The same six actions the dashboard builds; labelled rather than icon-only because
+// `tag` and `tags` are near-identical glyphs.
+const BULK_ACTIONS = [
+  { label: "Log contact", icon: "check", run: () => { window.__bulkRan = "Log contact"; } },
+  { label: "Set cadence", icon: "gauge", run: () => { window.__bulkRan = "Set cadence"; } },
+  { label: "Add tag", icon: "tag", run: () => { window.__bulkRan = "Add tag"; } },
+  { label: "Remove tag", icon: "tags", run: () => { window.__bulkRan = "Remove tag"; } },
+  { label: "Set place", icon: "map-pin", run: () => { window.__bulkRan = "Set place"; } },
+  { label: "Snooze", icon: "alarm-clock", run: () => { window.__bulkRan = "Snooze"; } },
+];
+const sheet = new PRMM.BulkActionsModal(plugin, 30, BULK_ACTIONS);
+sheet.open();
+window.__sheet = sheet;
+
 window.__ready = true;
 </script>

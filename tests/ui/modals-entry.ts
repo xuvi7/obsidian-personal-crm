@@ -3,6 +3,7 @@ export {
 	ContactImportModal,
 } from "../../src/import-modal";
 export {
+	BulkActionsModal,
 	CreatePersonModal,
 	LogContactModal,
 	PersonActionsModal,
