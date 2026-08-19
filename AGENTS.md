@@ -273,7 +273,9 @@ Two **opt-in** env vars, because **this repo is public**:
 | `PRM_TEST_PRIVATE_TERMS` | comma-separated strings `test-defaults` asserts never appear in shipped defaults |
 
 Leave both unset — as CI does — and those assertions skip. **Never hardcode a vault path,
-a real person's name, a real email, or a real phone number into a fixture.** Fixture people
+a home-relative repo path, a real person's name, a real email, or a real phone number into
+a fixture.** Use `harness.repoRoot` and `process.execPath`; a suite that passes locally and
+fails in CI has almost always assumed a path. Fixture people
 are fictional (`Dana Ochoa`, `Initech`, `@example.com`, `555-555-xxxx`); a contacts-import
 fixture in particular is tempting to paste straight out of a real Google Contacts export,
 and that would publish a third party's PII.
