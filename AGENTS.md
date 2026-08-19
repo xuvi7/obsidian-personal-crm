@@ -229,23 +229,66 @@ sanctioned APIs are `setCssProps` (custom properties) and `setCssStyles`.
 
 ### Tests
 
-⚠️ **The test suites currently live outside the repo**, in the session scratchpad:
-
+```bash
+npm test                          # typecheck + lint + all 24 suites
+npm run test:only                 # just the suites (skips typecheck/lint)
+node tests/test-drift.cjs         # one suite, directly
 ```
-/private/tmp/claude-502/-Users-vincent-xu-Repos/<session>/scratchpad/test-*.cjs
+
+`tests/run.cjs` builds the bundle **once** into `tests/.build/` (gitignored), then runs
+each `tests/test-*.cjs` as its own child process and prints a one-line summary per suite.
+It exits non-zero if any suite fails. Child stderr is captured rather than inherited,
+because several suites deliberately exercise error paths and log to stderr — you only see
+that output when a suite actually fails.
+
+Each suite is a standalone Node script with its own tiny `check()` helper. They bundle the
+**real** source with esbuild and drive it against a fake vault (`tests/stub-obsidian.cjs`)
+that stores real text and computes a realistic metadata cache. ~500 assertions across 24
+files.
+
+Shared helpers live in `tests/build.cjs`:
+
+| Helper | What it gives you |
+| --- | --- |
+| `buildOnce()` | builds `src/main.ts` into `tests/.build/`, idempotent per process |
+| `loadPlugin()` | `require`s the built plugin bundle |
+| `bundleModule("src/x.ts")` | bundles one module standalone and returns its path |
+| `realVault()` | the path from `PRM_TEST_VAULT`, or `null` |
+
+`obsidian` is not a real package. Every suite must intercept it **before** requiring any
+bundle:
+
+```js
+const Module = require("module");
+const { makeStub } = require("./stub-obsidian.cjs");
+const stub = makeStub([]);
+Module._load = ((o) => (r, p, m) => (r === "obsidian" ? stub : o(r, p, m)))(Module._load);
 ```
 
-Each is a standalone Node script — no runner, its own tiny `check()` helper — run with
-`node <file>`. They bundle the **real** source with esbuild and drive it against a fake
-vault (`stub-obsidian.cjs`) that stores real text and computes a realistic metadata
-cache. ~650 assertions across ~24 files. **If you are starting fresh work here, moving
-these into the repo is the highest-value housekeeping available.**
+Two **opt-in** env vars, because **this repo is public**:
+
+| Var | Effect when set |
+| --- | --- |
+| `PRM_TEST_VAULT` | additionally exercises the heuristics against a real vault (§7) |
+| `PRM_TEST_PRIVATE_TERMS` | comma-separated strings `test-defaults` asserts never appear in shipped defaults |
+
+Leave both unset — as CI does — and those assertions skip. **Never hardcode a vault path,
+a real person's name, a real email, or a real phone number into a fixture.** Fixture people
+are fictional (`Dana Ochoa`, `Initech`, `@example.com`, `555-555-xxxx`); a contacts-import
+fixture in particular is tempting to paste straight out of a real Google Contacts export,
+and that would publish a third party's PII.
+
+CI (`.github/workflows/ci.yml`) runs `npm test` on every push to `main` and every PR.
+`release.yml` only typechecks and lints, and only on a tag, so CI is the only thing that
+runs behaviour.
 
 ### Verifying UI changes
 
-Browser harnesses under `scratchpad/ui/` render the **real** components against the
-**real** `styles.css` in Chrome: `dashboard.html` (`?n=3000` for scale), `calendar.html`,
-`modals.html`.
+Browser harnesses under `tests/ui/` render the **real** components against the **real**
+`styles.css` in Chrome: `dashboard.html` (`?n=3000` for scale), `calendar.html`,
+`modals.html`, `create.html`, `import.html`. Each loads a `*-entry.ts` that imports
+straight from `../../src/`, so they cannot drift from the source; `obsidian-shim.js` and
+`obsidian-shim-modals.js` stand in for the host API.
 
 **Treat harness output with suspicion.** It has flattered reality five separate times,
 each hiding a real bug:

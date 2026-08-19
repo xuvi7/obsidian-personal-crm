@@ -1,0 +1,190 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>PRM dashboard harness</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* Approximate Obsidian's theme variables and the view-content box. */
+  :root {
+    --background-primary: #1e1e1e; --background-secondary: #252525;
+    --background-modifier-border: #3a3a3a; --background-modifier-hover: #2c2c2c;
+    --background-modifier-active-hover: #333;
+    --text-normal: #dcddde; --text-muted: #999; --text-faint: #666;
+    --text-accent: #7f6df2; --text-error: #e5534b; --text-warning: #d29922;
+    --text-success: #3fb950; --text-on-accent: #fff;
+    --interactive-accent: #7f6df2; --interactive-accent-hover: #8f7ff5;
+    --radius-s: 4px; --radius-m: 8px;
+    --font-ui-small: 13px; --font-ui-smaller: 12px;
+    --font-monospace: ui-monospace, monospace; --icon-s: 16px;
+  }
+  html, body { margin: 0; background: #111; color: var(--text-normal);
+    font-family: -apple-system, system-ui, sans-serif; font-size: 14px; }
+  /* Stand in for Obsidian's leaf: a fixed-height pane, as in the real app. */
+  #leaf { position: absolute; inset: 20px; display: flex; flex-direction: column;
+    background: var(--background-primary); border: 1px solid #444; overflow: hidden; }
+  .view-content { flex: 1 1 auto; min-height: 0; }
+  /* Obsidian's real button rules, verbatim in structure, from app.css:
+       `button` (0,0,1) sets padding/height/radius — any plugin class outranks it.
+       `button:not(.clickable-icon)` (0,1,1) sets background-color and box-shadow —
+       which a plugin's SINGLE class does NOT outrank.
+     Getting this specificity right is what lets the harness catch a fill losing the
+     cascade; a bare `button` selector here made a broken grid look correct. */
+  button { color: var(--text-normal); border: none; border-radius: var(--radius-s);
+    padding: 4px 10px; height: 28px; font-size: 13px; cursor: pointer; }
+  button:not(.clickable-icon) { background-color: #2f2f2f;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.3); }
+  input, select { background: #2a2a2a; color: var(--text-normal);
+    border: 1px solid #3a3a3a; border-radius: var(--radius-s); padding: 3px 6px; }
+  .svg-icon { width: 16px; height: 16px; vertical-align: middle; }
+  .clickable-icon { padding: 4px; line-height: 1; }
+</style>
+<div id="leaf"><div class="view-content" id="content"></div></div>
+<script>
+// --- Obsidian's element helpers, as the plugin expects them ---
+// The full DomElementInfo contract from obsidian.d.ts. It previously handled only
+// cls/text/attr/title, so `createEl("option", { value })` produced an option with no
+// value — which made the sort dropdown untestable: select.value was always "".
+function applyOpts(el, o) {
+  if (!o) return el;
+  if (typeof o === "string") { el.className = o; return el; }
+  if (o.cls) (Array.isArray(o.cls) ? o.cls : String(o.cls).split(" ")).forEach(c => c && el.classList.add(c));
+  if (o.text != null) el.textContent = o.text;
+  if (o.attr) for (const [k, v] of Object.entries(o.attr)) el.setAttribute(k, v);
+  if (o.title) el.title = o.title;
+  if (o.value !== undefined) el.value = o.value;
+  if (o.type !== undefined) el.type = o.type;
+  if (o.href !== undefined) el.href = o.href;
+  if (o.placeholder !== undefined) el.placeholder = o.placeholder;
+  if (o.prepend && el.parentElement) el.parentElement.prepend(el);
+  return el;
+}
+HTMLElement.prototype.createEl = function (tag, o) {
+  const el = document.createElement(tag); applyOpts(el, o); this.appendChild(el); return el;
+};
+HTMLElement.prototype.createDiv = function (o) { return this.createEl("div", o); };
+HTMLElement.prototype.createSpan = function (o) { return this.createEl("span", o); };
+HTMLElement.prototype.empty = function () { while (this.firstChild) this.removeChild(this.firstChild); };
+HTMLElement.prototype.addClass = function (c) { this.classList.add(c); return this; };
+HTMLElement.prototype.hasClass = function (c) { return this.classList.contains(c); };
+HTMLElement.prototype.addClasses = function (cs) { cs.forEach(c => this.classList.add(c)); return this; };
+HTMLElement.prototype.removeClass = function (c) { this.classList.remove(c); return this; };
+HTMLElement.prototype.toggleClass = function (c, on) { this.classList.toggle(c, !!on); return this; };
+HTMLElement.prototype.setText = function (t) { this.textContent = t; };
+HTMLElement.prototype.setCssProps = function (props) {
+  for (const [k, v] of Object.entries(props)) this.style.setProperty(k, v);
+};
+HTMLElement.prototype.setCssStyles = function (styles) { Object.assign(this.style, styles); };
+// Obsidian exposes these as globals too, not only as element methods.
+window.createEl = (tag, o) => applyOpts(document.createElement(tag), o);
+window.createDiv = (o) => window.createEl("div", o);
+window.createSpan = (o) => window.createEl("span", o);
+HTMLElement.prototype.isShown = function () { return this.offsetParent !== null || this === document.body; };
+HTMLElement.prototype.show = function () { this.style.display = ""; };
+HTMLElement.prototype.hide = function () { this.style.display = "none"; };
+HTMLElement.prototype.contains2 = HTMLElement.prototype.contains;
+String.prototype.contains = function (s) { return this.indexOf(s) !== -1; };
+window.createFragment = (fn) => { const f = document.createDocumentFragment();
+  f.createDiv = (o) => { const d = document.createElement("div"); applyOpts(d, o); f.appendChild(d); return d; };
+  f.createEl = (t, o) => { const d = document.createElement(t); applyOpts(d, o); f.appendChild(d); return d; };
+  f.appendText = (t) => f.appendChild(document.createTextNode(t)); fn(f); return f; };
+</script>
+<script src="view.bundle.js"></script>
+<script>
+// --- Fake plugin state: enough people to force scrolling ---
+const TIERS = [
+  { id: "inner", label: "Inner circle", cadenceDays: 14, color: "#e0567a" },
+  { id: "close", label: "Close", cadenceDays: 30, color: "#e8913a" },
+  { id: "casual", label: "Casual", cadenceDays: 90, color: "#3aa0e8" },
+  { id: "warm", label: "Keep warm", cadenceDays: 180, color: "#8b7ce8" },
+  { id: "dormant", label: "Dormant", cadenceDays: 365, color: "#7c8b8f" },
+];
+const NAMES = ["Sam Rivera","Ana Diaz","Bo Chen","Cy Fox","Dee Ray","Eli Moore","Fay Okafor",
+  "Gil Tan","Hana Sato","Ivo Petrov","Jo Kim","Kai Silva","Lena Roth","Milo Grant","Nia Bello",
+  "Omar Haddad","Pia Lund","Quinn Ash","RexOlsen","Sara Vega","Tom Reyes","Uma Prasad",
+  "Vic Toma","Wren Hall","Xan Ito","Yara Nasr","Zeke Park","Ada Vance","Ben Cortez","Cleo Marsh"];
+const COUNT = Number(new URLSearchParams(location.search).get("n") || NAMES.length);
+const LONG = Array.from({length: COUNT}, (_, i) => NAMES[i % NAMES.length] + (i >= NAMES.length ? " " + i : ""));
+const records = LONG.map((name, i) => {
+  const tier = TIERS[i % TIERS.length];
+  const overdue = 40 - i * 3;
+  return {
+    path: `People/${name}.md`, name, aliases: [], tierId: tier.id, tierMissing: false,
+    cadenceOverride: null, paused: false, ignoreJournal: false, snoozeUntil: null,
+    birthday: i % 7 === 0 ? "04-17" : null, relationship: i % 5 === 0 ? "climbing gym" : null,
+    createdDate: "2025-06-01", contactDates: ["2026-07-0" + ((i % 9) + 1)],
+    sources: new Map([["2026-07-0" + ((i % 9) + 1), "Daily/x.md"]]),
+    lastContact: "2026-07-0" + ((i % 9) + 1), mentionCount: 30 - i,
+    cadenceDays: tier.cadenceDays, dueDate: "2026-08-01",
+    overdueDays: overdue, cadenceProgress: Math.min(1, (i % 10) / 10),
+    status: overdue >= 0 ? "overdue" : "due-soon", baselineSource: "contact",
+    daysUntilBirthday: i % 7 === 0 ? 12 : null,
+    tags: [["work"],["gym","climbing"],[],["family"],["work","gym"],[],["college"]][i % 7],
+    typicalGapDays: [7, 14, null, 30, 3, null, 90][i % 7],
+    drifting: i % 5 === 0,
+    location: ["Lisbon","Brooklyn, NY","Berlin",null,"Lisbon",null,"Tokyo"][i % 7],
+    openLoops: i % 4 === 0
+      ? [{ path: `People/${name}.md`, line: 5, offset: 40, own: true }]
+      : i % 9 === 0
+        ? [{ path: "Projects/Trip.md", line: 2, offset: 10, own: false },
+           { path: `People/${name}.md`, line: 6, offset: 60, own: true }]
+        : [],
+  };
+});
+const listeners = [];
+const plugin = {
+  manifest: { id: "personal-crm" },
+  settings: { tiers: TIERS },
+  engine: {
+    all: () => records,
+    get: (path) => records.find((r) => r.path === path) ?? null,
+    stats: () => ({ overdue: records.filter(r=>r.status==="overdue").length,
+      dueSoon: records.filter(r=>r.status==="due-soon").length,
+      tracked: records.length, untracked: 12, paused: 0, snoozed: 0,
+      total: records.length, unknownTier: 0 }),
+    diagnostics: () => ({ personFilesFound: records.length, personFilesSkipped: 1,
+      journalFilesScanned: 1897, journalFilesDated: 1897, interactionsFound: 2877,
+      missingFolders: [], buildMs: 2.5 }),
+    onChange: (cb) => { listeners.push(cb); return () => {}; },
+    rebuild: () => {},
+    allLocations: () => {
+      const seen = new Map();
+      for (const r of records) if (r.location) seen.set(r.location, (seen.get(r.location) || 0) + 1);
+      return [...seen.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l]) => l);
+    },
+    allTags: () => {
+      const counts = new Map();
+      for (const r of records) for (const t of r.tags) counts.set(t, (counts.get(t) || 0) + 1);
+      return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([t]) => t);
+    },
+  },
+  undo: {
+    peekUndo: () => ({ label: "Log contact with Sam Rivera" }),
+    peekRedo: () => null,
+    onChange: (cb) => { listeners.push(cb); return () => {}; },
+  },
+  openPerson: () => {}, openInteraction: () => {},
+  startReachOutSession: () => {}, startTriage: () => {},
+  performUndo: () => {}, performRedo: () => {}, refreshStatusBar: () => {},
+  openCalendar: async () => { window.__openedCalendar = true; },
+  bulkLogContact: async (paths) => { window.__lastBulk = ["log", paths.length]; return { changed: paths.length, failed: [] }; },
+  bulkSetTier: async (paths) => { window.__lastBulk = ["tier", paths.length]; return { changed: paths.length, failed: [] }; },
+  bulkSnooze: async (paths) => { window.__lastBulk = ["snooze", paths.length]; return { changed: paths.length, failed: [] }; },
+  bulkSetLocation: async (paths, place) => { window.__lastBulk = ["place", paths.length, place]; return { changed: paths.length, failed: [] }; },
+  bulkTag: async (paths, tag, add) => { window.__lastBulk = [add ? "tag" : "untag", paths.length, tag]; return { changed: paths.length, failed: [] }; },
+};
+const leaf = { contentEl: document.getElementById("content") };
+window.__opened = [];
+const view = new PRM.PrmDashboardView(leaf, plugin);
+view.filter = "all";
+view.onOpen();
+window.__view = view;
+window.__bench = (n) => {
+  const t0 = performance.now(); view.renderAll(); const build = performance.now() - t0;
+  void document.body.offsetHeight;             // force layout
+  const total = performance.now() - t0;
+  return { rows: document.querySelectorAll(".prm-row").length,
+    nodes: document.querySelectorAll(".prm-list *").length,
+    selects: document.querySelectorAll(".prm-list select").length,
+    build: +build.toFixed(1), withLayout: +total.toFixed(1) };
+};
+window.__ready = true;
+</script>

@@ -14,10 +14,11 @@ want to be in touch** with each person.
 
 ## Installing
 
-Not in the community plugin directory yet, so either:
+**From Obsidian** — Settings → Community plugins → Browse, search for **Personal
+CRM**, install and enable.
 
-**With [BRAT](https://github.com/TfTHacker/obsidian42-brat)** — add the beta plugin
-`xuvi7/obsidian-personal-crm`. BRAT keeps it updated.
+**With [BRAT](https://github.com/TfTHacker/obsidian42-brat)** — add
+`xuvi7/obsidian-personal-crm` to track pre-releases instead.
 
 **By hand** — download `main.js`, `manifest.json` and `styles.css` from the
 [latest release](https://github.com/xuvi7/obsidian-personal-crm/releases/latest)
@@ -452,18 +453,24 @@ See [CHANGELOG.md](CHANGELOG.md).
 **Working on the code?** Read [`AGENTS.md`](AGENTS.md) first. It documents the
 architecture, the invariants that must not be broken, the Obsidian platform traps that
 have already cost time (CSS specificity against the app's own button rules, `var()`
-failure modes, when a plugin reload is required), the performance budgets, and where the
-tests live.
+failure modes, when a plugin reload is required), the performance budgets, and how the
+tests work.
 
 ```bash
 npm install
 npm run build                          # typecheck + bundle
 PRM_OUT_DIR="/path/to/vault/.obsidian/plugins/personal-crm" npm run build
 npm run dev                            # rebuild on change
+npm test                               # typecheck + lint + 24 suites
 ```
 
 `PRM_OUT_DIR` sets the install target; without it the bundle lands in the repo
 root. Reload the plugin in Obsidian to pick up a new build.
+
+Tests live in `tests/`: ~500 assertions that bundle the real source and drive it
+against a fake vault which stores real text and computes a realistic metadata
+cache. `npm test` runs them all; `node tests/test-drift.cjs` runs one. Set
+`PRM_TEST_VAULT` to also check the heuristics against a real vault.
 
 | File | Role |
 | --- | --- |

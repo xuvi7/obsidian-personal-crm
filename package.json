@@ -11,8 +11,9 @@
     "typecheck": "tsc --noEmit --skipLibCheck",
     "deploy": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
     "deploy:watch": "node esbuild.config.mjs",
-    "test": "npm run typecheck && npm run lint",
-    "lint": "eslint src"
+    "test": "npm run typecheck && npm run lint && node tests/run.cjs",
+    "lint": "eslint src",
+    "test:only": "node tests/run.cjs"
   },
   "keywords": [
     "obsidian",

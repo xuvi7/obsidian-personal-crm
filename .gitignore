@@ -9,3 +9,6 @@ deploy.local.sh
 
 # Release build output
 dist/
+
+# Test build output (tests/build.cjs writes here)
+tests/.build/

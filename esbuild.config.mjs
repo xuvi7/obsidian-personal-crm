@@ -9,7 +9,14 @@ Personal CRM for Obsidian — bundled by esbuild.
 Source: obsidian-personal-crm/src
 */`;
 
-const prod = process.argv[2] === "production";
+const mode = process.argv[2];
+const prod = mode === "production";
+/**
+ * One-shot but unminified, for the test suites: they load this bundle and a minified
+ * stack trace points nowhere. `dev` watches and never exits, which a test run can't
+ * use.
+ */
+const once = mode === "once";
 const outDir = process.env.PRM_OUT_DIR || ".";
 const installing = path.resolve(outDir) !== path.resolve(".");
 
@@ -66,7 +73,7 @@ const ctx = await esbuild.context({
   plugins: [assetPlugin],
 });
 
-if (prod) {
+if (prod || once) {
   await ctx.rebuild();
   await ctx.dispose();
   process.exit(0);

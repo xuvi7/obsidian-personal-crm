@@ -1,0 +1,29 @@
+# Runs on every push and pull request. Until this existed, nothing behavioural ran in
+# CI at all — the release workflow only typechecks and lints, and only on a tag.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      # Typecheck, lint, then build from src/ and run every suite against it.
+      # PRM_TEST_VAULT is deliberately unset here: the handful of assertions that
+      # read a real vault skip, and the rest run against the fake one.
+      - run: npm test

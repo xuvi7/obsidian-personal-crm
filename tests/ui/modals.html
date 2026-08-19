@@ -1,0 +1,141 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>PRM modals harness</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  :root {
+    --background-primary: #1e1e1e; --background-secondary: #252525;
+    --background-modifier-border: #3a3a3a; --background-modifier-hover: #2c2c2c;
+    --background-modifier-active-hover: #333;
+    --text-normal: #dcddde; --text-muted: #999; --text-faint: #666;
+    --text-accent: #7f6df2; --text-error: #e5534b; --text-warning: #d29922;
+    --text-success: #3fb950; --text-on-accent: #fff;
+    --interactive-accent: #7f6df2; --interactive-accent-hover: #8f7ff5;
+    --radius-s: 4px; --radius-m: 8px;
+    --font-ui-small: 13px; --font-ui-smaller: 12px;
+    --font-monospace: ui-monospace, monospace; --icon-s: 16px;
+  }
+  html,body{margin:0;background:#0d0d0d;color:var(--text-normal);
+    font-family:-apple-system,system-ui,sans-serif;font-size:14px;padding:24px;}
+  #modal-host{display:flex;flex-direction:column;align-items:center;gap:28px;}
+  .modal{background:var(--background-primary);border:1px solid #444;border-radius:10px;
+    padding:20px 24px;box-shadow:0 12px 40px rgba(0,0,0,.6);}
+  .modal-title{font-size:1.15rem;font-weight:700;margin-bottom:10px;}
+  .setting-item{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:10px 0;border-top:1px solid var(--background-modifier-border);}
+  .setting-item-name{font-weight:600;}
+  .setting-item-description{color:var(--text-muted);font-size:var(--font-ui-smaller);}
+  .setting-item-control{display:flex;gap:8px;align-items:center;}
+  button{background:#2f2f2f;color:var(--text-normal);border:none;border-radius:var(--radius-s);
+    padding:6px 12px;font-size:13px;cursor:pointer;}
+  button.mod-cta{background:var(--interactive-accent);color:#fff;font-weight:600;}
+  button.mod-warning{background:var(--text-error);color:#fff;}
+  input,select,textarea{background:#2a2a2a;color:var(--text-normal);
+    border:1px solid #3a3a3a;border-radius:var(--radius-s);padding:5px 8px;font-size:13px;}
+  .svg-icon{width:16px;height:16px;vertical-align:middle;}
+  h2{font-size:1.2rem;margin:0;}
+  .caption{color:#777;font-size:12px;text-align:center;margin-bottom:-16px;}
+</style>
+<div id="modal-host"></div>
+<script>
+function applyOpts(el,o){ if(!o) return el;
+  if(typeof o==="string"){el.className=o;return el;}
+  if(o.cls)(Array.isArray(o.cls)?o.cls:String(o.cls).split(" ")).forEach(c=>c&&el.classList.add(c));
+  if(o.text!=null)el.textContent=o.text;
+  if(o.attr)for(const[k,v]of Object.entries(o.attr))el.setAttribute(k,v);
+  return el; }
+HTMLElement.prototype.createEl=function(t,o){const e=document.createElement(t);applyOpts(e,o);this.appendChild(e);return e;};
+HTMLElement.prototype.createDiv=function(o){return this.createEl("div",o);};
+HTMLElement.prototype.createSpan=function(o){return this.createEl("span",o);};
+HTMLElement.prototype.empty=function(){while(this.firstChild)this.removeChild(this.firstChild);};
+HTMLElement.prototype.addClass=function(c){this.classList.add(c);return this;};
+HTMLElement.prototype.addClasses=function(cs){cs.forEach(c=>this.classList.add(c));return this;};
+HTMLElement.prototype.removeClass=function(c){this.classList.remove(c);return this;};
+HTMLElement.prototype.toggleClass=function(c,o){this.classList.toggle(c,!!o);return this;};
+HTMLElement.prototype.setText=function(t){this.textContent=t;};
+HTMLElement.prototype.isShown=function(){return true;};
+String.prototype.contains=function(s){return this.indexOf(s)!==-1;};
+window.createFragment=(fn)=>{const f=document.createDocumentFragment();
+  f.createDiv=(o)=>{const d=document.createElement("div");applyOpts(d,o);f.appendChild(d);return d;};
+  f.createEl=(t,o)=>{const d=document.createElement(t);applyOpts(d,o);f.appendChild(d);return d;};
+  f.appendText=(t)=>f.appendChild(document.createTextNode(t));fn(f);return f;};
+</script>
+<script>
+// Obsidian exposes these; the harness must too, or the real code can't run.
+window.activeDocument = document;
+</script>
+<script src="modals.bundle.js"></script>
+<script>
+const TIERS=[{id:"close",label:"Close",cadenceDays:30,color:"#e8913a"},
+             {id:"inner",label:"Inner circle",cadenceDays:14,color:"#e0567a"}];
+const record={ path:"People/Sam Rivera.md", name:"Sam Rivera", aliases:[], tierId:"close",
+  tierMissing:false, cadenceOverride:null, paused:false, snoozeUntil:null, birthday:null,
+  relationship:"climbing gym", createdDate:"2025-06-01", lastContact:"2026-06-28",
+  mentionCount:14, cadenceDays:30, dueDate:"2026-07-28", overdueDays:20,
+  cadenceProgress:.9, status:"overdue", baselineSource:"contact", daysUntilBirthday:null,
+  contactDates:["2026-08-06","2026-07-09","2026-05-14","2026-03-21","2026-03-20","2026-03-19","2026-03-18","2026-03-17","2026-03-16","2026-03-15","2026-03-14","2026-03-13","2026-03-12","2026-03-11","2026-03-10","2026-03-09","2026-03-08","2026-03-07","2026-03-06","2026-03-05","2026-03-04","2026-03-03","2026-03-02","2026-03-01","2026-02-28","2026-02-27","2026-02-26","2026-02-25","2026-02-24","2026-02-23","2026-02-22","2026-02-21","2026-02-20","2026-02-19","2026-02-18","2026-02-17","2026-02-16","2026-02-15","2026-02-14","2026-02-13","2026-02-12","2026-02-11","2026-02-10","2026-02-09","2026-02-08","2026-02-07","2026-02-06","2026-02-05","2026-02-04","2026-02-03","2026-02-02","2026-02-01","2026-01-31","2026-01-30","2026-01-29","2026-01-28","2026-01-27","2026-01-26","2026-01-25","2026-01-24","2026-01-23","2026-01-22","2026-01-21","2026-01-20","2026-01-19","2026-01-18","2026-01-17","2026-01-16","2026-01-15","2026-01-14","2026-01-13","2026-01-12","2026-01-11","2026-01-10","2026-01-09","2026-01-08","2026-01-07","2026-01-06","2026-01-05","2026-01-04","2026-01-03","2026-01-02","2026-01-01","2025-12-31","2025-12-30","2025-12-29","2025-12-28","2025-12-27","2025-12-26","2025-12-25","2025-12-24","2025-12-23","2025-12-22"], sources:new Map(["2026-08-06","2026-07-09","2026-05-14","2026-03-21","2026-03-20","2026-03-19","2026-03-18","2026-03-17","2026-03-16","2026-03-15","2026-03-14","2026-03-13","2026-03-12","2026-03-11","2026-03-10","2026-03-09","2026-03-08","2026-03-07","2026-03-06","2026-03-05","2026-03-04","2026-03-03","2026-03-02","2026-03-01","2026-02-28","2026-02-27","2026-02-26","2026-02-25","2026-02-24","2026-02-23","2026-02-22","2026-02-21","2026-02-20","2026-02-19","2026-02-18","2026-02-17","2026-02-16","2026-02-15","2026-02-14","2026-02-13","2026-02-12","2026-02-11","2026-02-10","2026-02-09","2026-02-08","2026-02-07","2026-02-06","2026-02-05","2026-02-04","2026-02-03","2026-02-02","2026-02-01","2026-01-31","2026-01-30","2026-01-29","2026-01-28","2026-01-27","2026-01-26","2026-01-25","2026-01-24","2026-01-23","2026-01-22","2026-01-21","2026-01-20","2026-01-19","2026-01-18","2026-01-17","2026-01-16","2026-01-15","2026-01-14","2026-01-13","2026-01-12","2026-01-11","2026-01-10","2026-01-09","2026-01-08","2026-01-07","2026-01-06","2026-01-05","2026-01-04","2026-01-03","2026-01-02","2026-01-01","2025-12-31","2025-12-30","2025-12-29","2025-12-28","2025-12-27","2025-12-26","2025-12-25","2025-12-24","2025-12-23","2025-12-22"].map((d)=>[d,`Daily/${d}.md`])), tags:["climbing","college"],
+  typicalGapDays:14, drifting:true,
+  openLoops:[
+    { path:"People/Sam Rivera.md", line:3, offset:0, own:true },
+    { path:"People/Sam Rivera.md", line:4, offset:1, own:true },
+    { path:"Efforts/Lisbon trip.md", line:7, offset:2, own:false },
+  ] };
+const LOOP_FILES = {
+  "People/Sam Rivera.md": "---\nx: 1\n---\n- [ ] send the climbing gym list \u{1F4C5} 2026-08-24\n- [ ] ask about his family next time\n",
+  "Efforts/Lisbon trip.md": "notes\n\n- [x] book flights\n\n\n\n\n- [ ] introduce him to the route-setter (2026-09-10)\n",
+};
+const NOTE = `up:: [[People MOC]]
+
+# Facts
+- First met: <% tp.file.cursor() %>
+# Thoughts
+
+Talking points
+- wish I'd been more outgoing when we first met
+- the move away in middle school and losing touch
+- Tanki and smash at the old house
+
+- did a masters in four years and took a gap year to stay and do research, so is only just starting work now
+- has struggled with mental health but has recovered since
+	- journalling helped him reflect
+- working on a startup doing mental-health diagnosis chat
+- we are old acquaintances and connect decently well, though I feel slightly distant for some reason
+	- maybe because in my mind he is very social, so it is harder to feel closer despite a deep conversation
+- wants climbing recommendations for Lisbon
+- said he would introduce me to his route-setting friend
+- last few times we spoke it was mostly about work, should ask about family next time`;
+const app={ vault:{ getAbstractFileByPath:(p)=>new window.__TFile(p),
+  getFileByPath:(p)=>new window.__TFile(p),
+  cachedRead: async(f)=>LOOP_FILES[f.path] ?? NOTE },
+  workspace:{ getLeaf:()=>({openFile:async()=>{}}) } };
+const plugin={ app, settings:{tiers:TIERS, calendarWeekStart:"0"},
+  logContact:async(f,d,n)=>console.log("logContact",d,JSON.stringify(n)),
+  openPerson:()=>{}, snooze:async()=>{}, setTier:async()=>{}, setPaused:async()=>{},
+  setCadence:async()=>{},
+  engine:{ get:()=>record, allTags:()=>["climbing","college","work"],
+           onChange:(cb)=>{ window.__engineCb = cb; return () => { window.__unsubbed = true; }; } },
+  addFollowUp:async(r,t)=>{ console.log("addFollowUp",t); return true; },
+  openCalendar:async()=>{ window.__openedCal = true; },
+  completeLoop:async(ref)=>{ console.log("completeLoop",ref.path,ref.line); return true; },
+  bulkTag:async(paths,tag,add)=>console.log("bulkTag",tag,add) };
+
+document.getElementById("modal-host").insertAdjacentHTML("beforeend",
+  '<div class="caption">Reach out — with the note box</div>');
+const reach = new PRMM.ReachOutModal(plugin, [record, {...record, name:"Ana Diaz"}]);
+// Seed the draft before opening, so the single render includes it and the async
+// markdown preview isn't orphaned by a second render.
+reach.drafts.set(record.path, "Caught up over coffee.\n\nHe's moving to Lisbon in October and wants climbing recommendations.\nSaid he'd introduce me to his route-setting friend.");
+reach.open();
+
+document.getElementById("modal-host").insertAdjacentHTML("beforeend",
+  '<div class="caption">Log contact — with the note box</div>');
+const log = new PRMM.LogContactModal(plugin, record);
+log.open();
+const ta = document.querySelectorAll(".prm-note-input");
+if (ta.length > 1) ta[ta.length-1].value = "Quick text — he's back from the trip.\nWants to climb next weekend.";
+document.getElementById("modal-host").insertAdjacentHTML("beforeend",
+  '<div class="caption">Person panel — opened by clicking a row</div>');
+const panel = new PRMM.PersonActionsModal(plugin, record);
+panel.open();
+window.__ready = true;
+</script>
