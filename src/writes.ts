@@ -31,9 +31,4 @@ export class WriteQueue {
 
 		return result;
 	}
-
-	/** True while any write for this path is still pending. */
-	isBusy(key: string): boolean {
-		return this.tails.has(key);
-	}
 }

@@ -143,7 +143,7 @@ export class ContactImportModal extends Modal {
 		});
 
 		const button = row.createEl("button", {
-			cls: "prm-primary-btn",
+			cls: "prm-primary-btn mod-cta",
 			text: this.contacts.length > 0 ? "Choose a different file" : "Choose export file…",
 		});
 		button.onclick = () => input.click();

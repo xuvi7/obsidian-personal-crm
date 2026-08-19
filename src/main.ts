@@ -1,4 +1,5 @@
 import { Notice, Plugin, TAbstractFile, TFile, debounce, setIcon } from "obsidian";
+import type { Debouncer } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
 	FRONTMATTER_KEYS,
@@ -20,12 +21,13 @@ import {
 	TriageModal,
 } from "./modals";
 import { ContactImportModal } from "./import-modal";
-import { FileSnapshot, UndoEntry, UndoManager } from "./undo";
+import { FileSnapshot, UndoEntry, UndoManager , type UndoResult } from "./undo";
 import { WriteQueue } from "./writes";
 import { detectJournalSources, detectPeopleFolder } from "./detect";
 import { formatDuration, isISODate, todayISO } from "./dates";
 import type { LoopRef, PersonRecord } from "./types";
 import { appendFollowUp, appendUnder, hasHeading, setTask } from "./loops";
+import { findHeading, shallowestHeadingLevel } from "./markdown";
 import {
 	asDisplay,
 	contactFields,
@@ -88,6 +90,7 @@ export default class PrmPlugin extends Plugin {
 		// in-memory data. `resetTimer: true` is deliberate — it collapses a sync
 		// burst of hundreds of files into a single rebuild.
 		const rebuild = debounce(() => this.reindex(), 700, true);
+		this.rebuildDebounced = rebuild;
 
 		this.registerEvent(this.app.metadataCache.on("resolved", () => this.onResolved(rebuild)));
 		this.registerEvent(
@@ -122,7 +125,18 @@ export default class PrmPlugin extends Plugin {
 	}
 
 	onunload(): void {
-		// Obsidian tears down registered views, events and DOM for us.
+		// Obsidian tears down registered views, events and DOM for us — but not a
+		// pending debounce.
+		//
+		// `saveSettings()` only *schedules* the write, 400 ms out, so it resolves
+		// before anything reaches disk. Changing a setting and then disabling the
+		// plugin (or quitting Obsidian) inside that window silently lost the change.
+		// `run()` flushes a pending call immediately.
+		this.persist.run();
+
+		// And a trailing rebuild must not fire against a torn-down plugin: it would
+		// touch the status bar element Obsidian has already removed.
+		this.rebuildDebounced?.cancel();
 	}
 
 	// ------------------------------------------------------------------- indexing
@@ -197,6 +211,9 @@ export default class PrmPlugin extends Plugin {
 	}
 
 	/** Debounced: settings fields fire per keystroke and each save reindexes. */
+	/** The index rebuild debouncer, held so `onunload` can cancel a trailing call. */
+	private rebuildDebounced: Debouncer<[], void> | null = null;
+
 	private persist = debounce(
 		() => {
 			void this.saveData(this.settings);
@@ -646,18 +663,43 @@ export default class PrmPlugin extends Plugin {
 
 	// ----------------------------------------------------------------- undo/redo
 
+	/**
+	 * One undo or redo at a time.
+	 *
+	 * `restore()` validates every file before writing any, so two overlapping calls
+	 * both passed validation, both wrote, and the second popped a second entry off the
+	 * stack having only re-applied the first one's work — leaving the older action
+	 * permanently unreversible and the redo stack holding a duplicate. Nothing in the
+	 * UI prevented a double-click.
+	 */
+	private undoing: Promise<void> | null = null;
+
 	async performUndo(): Promise<void> {
-		const result = await this.undo.undo();
-		this.engine.rebuild();
-		this.refreshStatusBar();
-		new Notice(result.ok ? `Undid: ${result.label}` : result.reason);
+		this.undoing = (this.undoing ?? Promise.resolve()).then(async () => {
+			const result = await this.undo.undo();
+			this.engine.rebuild();
+			this.refreshStatusBar();
+			this.reportUndo(result, "Undid");
+		});
+		return this.undoing;
 	}
 
 	async performRedo(): Promise<void> {
-		const result = await this.undo.redo();
-		this.engine.rebuild();
-		this.refreshStatusBar();
-		new Notice(result.ok ? `Redid: ${result.label}` : result.reason);
+		this.undoing = (this.undoing ?? Promise.resolve()).then(async () => {
+			const result = await this.undo.redo();
+			this.engine.rebuild();
+			this.refreshStatusBar();
+			this.reportUndo(result, "Redid");
+		});
+		return this.undoing;
+	}
+
+	private reportUndo(result: UndoResult, verb: string): void {
+		if (!result.ok) {
+			new Notice(result.reason);
+			return;
+		}
+		new Notice(result.note ? `${verb}: ${result.label} — ${result.note}` : `${verb}: ${result.label}`);
 	}
 
 	/**
@@ -1181,27 +1223,21 @@ export default class PrmPlugin extends Plugin {
 	private async appendBodyLog(file: TFile, date: string, note?: string): Promise<void> {
 		const heading = this.settings.bodyLogHeading;
 		const entry = this.logEntry(date, note);
-		const target = heading.trim().toLowerCase();
-
-		const cache = this.app.metadataCache.getFileCache(file);
-		const match = (cache?.headings ?? []).find(
-			(h) => h.heading.trim().toLowerCase() === target,
-		);
-
-		// Match the note's own top-level sections rather than always using `##`.
-		// A deeper heading would nest the log under whatever section precedes it,
-		// which is wrong in the outline and makes that section look non-empty.
-		const levels = (cache?.headings ?? []).map((h) => h.level);
-		const hashes = "#".repeat(levels.length > 0 ? Math.min(...levels) : 2);
 
 		await this.app.vault.process(file, (data) => {
+			// Located from `data`, inside the callback. Taking the offset from
+			// metadataCache was stale after a write — this method's own caller grows
+			// the frontmatter first — and the bullet landed inside the YAML, which
+			// destroyed it. These bytes are the bytes being written, so they can't lag.
+			const match = findHeading(data, heading);
 			if (match) {
-				const offset = match.position.end.offset;
-				// Guard against a cache that lags the file.
-				if (offset <= data.length) {
-					return `${data.slice(0, offset)}\n${entry}${data.slice(offset)}`;
-				}
+				return `${data.slice(0, match.afterLine)}${entry}\n${data.slice(match.afterLine)}`;
 			}
+
+			// Match the note's own top-level sections rather than always using `##`.
+			// A deeper heading would nest the log under whatever section precedes it,
+			// which is wrong in the outline and makes that section look non-empty.
+			const hashes = "#".repeat(shallowestHeadingLevel(data));
 			const separator = data.length === 0 || data.endsWith("\n") ? "" : "\n";
 			return `${data}${separator}\n${hashes} ${heading}\n${entry}\n`;
 		});

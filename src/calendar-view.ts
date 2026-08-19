@@ -1,4 +1,4 @@
-import { ItemView, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import type PrmPlugin from "./main";
 import type { PersonRecord } from "./types";
 import { todayISO } from "./dates";
@@ -33,6 +33,9 @@ export class PrmCalendarView extends ItemView {
 	/** Person path to show alone, or null for everyone. */
 	private focus: string | null = null;
 	private selected: string | null = null;
+	/** Coalescing state, so a hidden leaf doesn't rebuild on every vault write. */
+	private frame: number | null = null;
+	private dirty = false;
 
 	private chromeEl!: HTMLElement;
 	private gridEl!: HTMLElement;
@@ -70,15 +73,34 @@ export class PrmCalendarView extends ItemView {
 		this.gridEl = root.createDiv({ cls: "prm-cal-body" });
 		this.detailEl = root.createDiv({ cls: "prm-cal-detail" });
 
-		// Rebuilt on index changes, so logging contact shows up without a reload.
+		// Rebuilt on index changes, so logging contact shows up without a reload —
+		// but coalesced by frame and skipped while hidden. Every write anywhere in the
+		// vault fires this, and re-bucketing every interaction to rebuild 371 cells in
+		// a background tab is pure waste. The dashboard already worked this way; the
+		// calendar didn't.
 		this.register(
 			this.plugin.engine.onChange(() => {
 				this.cache = null;
-				this.render();
+				this.scheduleRender();
 			}),
 		);
 		this.render();
 		return Promise.resolve();
+	}
+
+	onResize(): void {
+		// Becoming visible is the moment to pay for a render we skipped.
+		if (this.dirty) this.scheduleRender();
+	}
+
+	private scheduleRender(): void {
+		this.dirty = true;
+		if (this.frame !== null) return;
+		this.frame = window.requestAnimationFrame(() => {
+			this.frame = null;
+			if (!this.contentEl.isShown()) return;
+			this.render();
+		});
 	}
 
 	/** Focus one person, from the dashboard or their panel. */
@@ -117,6 +139,7 @@ export class PrmCalendarView extends ItemView {
 	}
 
 	private render(): void {
+		this.dirty = false;
 		const grid = buildCalendar(this.interactions(), this.scale, todayISO(), {
 			weeks: 53,
 			years: 6,
@@ -307,13 +330,9 @@ export class PrmCalendarView extends ItemView {
 	}
 
 	onClose(): Promise<void> {
+		if (this.frame !== null) window.cancelAnimationFrame(this.frame);
+		this.frame = null;
 		this.contentEl.empty();
 		return Promise.resolve();
 	}
-}
-
-/** Open the note an interaction came from, if the view ever needs it. */
-export function sourceFile(plugin: PrmPlugin, path: string): TFile | null {
-	const file = plugin.app.vault.getAbstractFileByPath(path);
-	return file instanceof TFile ? file : null;
 }

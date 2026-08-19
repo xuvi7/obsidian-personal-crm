@@ -253,7 +253,7 @@ export class PrmDashboardView extends ItemView {
 
 		const buttons = titleRow.createDiv({ cls: "prm-header-buttons" });
 
-		const reachOut = buttons.createEl("button", { cls: "prm-primary-btn" });
+		const reachOut = buttons.createEl("button", { cls: "prm-primary-btn mod-cta" });
 		setIcon(reachOut.createSpan({ cls: "prm-action-icon" }), "send");
 		reachOut.createSpan({ text: "Reach out" });
 		reachOut.onclick = () => this.plugin.startReachOutSession();
@@ -676,7 +676,7 @@ export class PrmDashboardView extends ItemView {
 	}
 
 	private addPersonButton(parent: HTMLElement): void {
-		const btn = parent.createEl("button", { cls: "prm-primary-btn" });
+		const btn = parent.createEl("button", { cls: "prm-primary-btn mod-cta" });
 		setIcon(btn.createSpan({ cls: "prm-action-icon" }), "user-plus");
 		btn.createSpan({ text: "Add a person" });
 		btn.onclick = () => this.plugin.openCreatePerson();
@@ -699,21 +699,6 @@ export class PrmDashboardView extends ItemView {
 		const row = list.createDiv({ cls: `prm-row prm-row-${record.status}` });
 		row.dataset.prmPath = record.path;
 		row.toggleClass("prm-row-selected", this.selection.has(record.path));
-		row.dataset.prmSearch = normalizeName(
-			[
-				record.name,
-				...record.aliases,
-				record.relationship ?? "",
-				record.location ?? "",
-				...record.tags,
-			].join(" "),
-		);
-		// Tags and places on their own, for '#'- and '@'-prefixed queries.
-		// normalizeName turns both sigils into a space, so query and value meet in
-		// the same spelling.
-		row.dataset.prmTags = normalizeName(record.tags.join(" "));
-		row.dataset.prmPlace = normalizeName(record.location ?? "");
-
 		const bar = row.createDiv({ cls: "prm-bar" });
 		const fill = bar.createDiv({ cls: "prm-bar-fill" });
 		fill.style.setProperty("--prm-progress", `${Math.round(record.cadenceProgress * 100)}%`);

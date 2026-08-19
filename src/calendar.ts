@@ -38,6 +38,9 @@ export interface CalendarGrid {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** How far back the year view will ever reach, whatever the data says. */
+const MAX_YEARS = 60;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Day of the week for an ISO date, 0 = Sunday. Epoch day 0 was a Thursday. */
@@ -127,8 +130,11 @@ function yearsOf(interactions: Interactions, today: string, limit: number): stri
 		if (Number.isFinite(year) && year < oldest) oldest = year;
 	}
 
-	// A limit of Infinity (the year view) reaches back to the oldest interaction.
-	const start = Math.max(oldest, limit >= thisYear ? oldest : thisYear - limit + 1);
+	// Floored as well as limited. One mistyped date — `prm-last-contacted: 1025-08-15`
+	// parses fine — otherwise renders a thousand year rows, each a real <button>.
+	const floor = thisYear - MAX_YEARS;
+	const from = Math.max(oldest, floor);
+	const start = Math.max(from, limit >= thisYear ? from : thisYear - limit + 1);
 	const out: string[] = [];
 	for (let year = thisYear; year >= start; year--) out.push(String(year));
 	return out;
@@ -326,7 +332,8 @@ export function trailingMonths(
  * the maximum drops almost every real period onto level 1.
  */
 export function shade(count: number, max: number): number {
-	if (count <= 0) return 0;
+	// A NaN count would otherwise produce the class `prm-cal-lNaN`.
+	if (!Number.isFinite(count) || count <= 0) return 0;
 	if (max <= 4) return Math.min(4, count);
 	const level = Math.ceil(Math.sqrt(count / max) * 4);
 	return Math.min(4, Math.max(1, level));

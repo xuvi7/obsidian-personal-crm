@@ -892,6 +892,14 @@ export class PersonActionsModal extends Modal {
 	private completed: LoopRef[] = [];
 	/** Focus the notes box on the first render only, not on every refresh. */
 	private focused = false;
+	/**
+	 * The half-typed follow-up.
+	 *
+	 * Held here rather than only in the input, because the panel redraws on every
+	 * index change — i.e. after any write anywhere in the vault, including its own —
+	 * and `contentEl.empty()` took the typed text with it.
+	 */
+	private draft = "";
 	private unsubscribe: (() => void) | null = null;
 
 	constructor(
@@ -903,9 +911,6 @@ export class PersonActionsModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.preview = new Component();
-		this.preview.load();
-
 		// Obsidian's metadata cache updates asynchronously after a write, so the
 		// rebuild that follows one can briefly see a note without its frontmatter —
 		// which rendered as "unclassified" here and stayed that way, because the
@@ -916,7 +921,31 @@ export class PersonActionsModal extends Modal {
 
 	private render(): void {
 		const { contentEl } = this;
+
+		// A redraw replaces every element, so focus lands on <body> and the caret
+		// jumps. Remembered by class rather than by node, since the node is about to
+		// be discarded.
+		// `activeDocument`, not `document`: Obsidian pops leaves out into their own
+		// window, and the modal may be living in one.
+		const active = activeDocument?.activeElement ?? null;
+		const refocus =
+			active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+				? {
+						cls: active.className,
+						start: active.selectionStart,
+						end: active.selectionEnd,
+					}
+				: null;
+
 		contentEl.empty();
+
+		// Replaced per render so the previous rendered subtree is released. This panel
+		// redraws on every index change, i.e. after every write anywhere in the vault,
+		// so reusing one Component leaked a rendered preview per redraw. Its siblings
+		// ReachOutModal and TriageModal already did this.
+		this.preview?.unload();
+		this.preview = new Component();
+		this.preview.load();
 
 		// The record can go stale while the modal is open — a log from here
 		// rewrites it — so read the live one each render.
@@ -998,8 +1027,8 @@ export class PersonActionsModal extends Modal {
 			onChange: (v) => (this.note = v),
 			onSubmit: () => void this.logIt(),
 		});
-		// Only the first time: a redraw shouldn't yank the caret out of whatever the
-		// user is doing.
+		// Only on the first draw. A redraw restores whatever had focus instead, via
+		// restoreFocus below, so it neither steals focus nor loses the caret.
 		if (!this.focused) {
 			this.focused = true;
 			window.setTimeout(() => noteField.focus(), 0);
@@ -1041,6 +1070,30 @@ export class PersonActionsModal extends Modal {
 		});
 
 		this.validate();
+		this.restoreFocus(refocus);
+	}
+
+	/** Put the caret back where the redraw found it. */
+	private restoreFocus(
+		refocus: { cls: string; start: number | null; end: number | null } | null,
+	): void {
+		if (!refocus) return;
+		const selector = refocus.cls
+			.split(/\s+/)
+			.filter(Boolean)
+			.map((c) => `.${CSS.escape(c)}`)
+			.join("");
+		if (selector.length === 0) return;
+		const next = this.contentEl.querySelector(selector);
+		if (!(next instanceof HTMLInputElement) && !(next instanceof HTMLTextAreaElement)) return;
+		next.focus();
+		if (refocus.start !== null && refocus.end !== null) {
+			try {
+				next.setSelectionRange(refocus.start, refocus.end);
+			} catch {
+				// A date input doesn't support selection ranges; focus alone is enough.
+			}
+		}
 	}
 
 	/**
@@ -1109,10 +1162,13 @@ export class PersonActionsModal extends Modal {
 			cls: "prm-loop-input",
 			attr: { type: "text", placeholder: "Add a follow-up…" },
 		});
+		input.value = this.draft;
+		input.addEventListener("input", () => (this.draft = input.value));
 		const submit = async () => {
 			const text = input.value.trim();
 			if (text.length === 0) return;
 			input.value = "";
+			this.draft = "";
 			if (await this.plugin.addFollowUp(record, text)) this.render();
 		};
 		input.addEventListener("keydown", (evt) => {
@@ -1155,15 +1211,25 @@ export class PersonActionsModal extends Modal {
 			box.onclick = () => {
 				const wanted = box.checked;
 				box.disabled = true;
-				void this.plugin.completeLoop(loop.ref, wanted).then((ok) => {
-					box.disabled = false;
-					if (!ok) {
+				void this.plugin
+					.completeLoop(loop.ref, wanted)
+					.then((ok) => {
+						if (!ok) {
+							box.checked = !wanted;
+							return;
+						}
+						row.toggleClass("prm-loop-done", wanted);
+						if (wanted) this.completed.push(loop.ref);
+					})
+					// completeLoop guards the write itself, but not the read that
+					// snapshots for undo. Without this the box stayed disabled forever
+					// on a failure, with no way back and an unhandled rejection.
+					.catch(() => {
 						box.checked = !wanted;
-						return;
-					}
-					row.toggleClass("prm-loop-done", wanted);
-					if (wanted) this.completed.push(loop.ref);
-				});
+					})
+					.finally(() => {
+						box.disabled = false;
+					});
 			};
 
 			row.createSpan({ cls: "prm-loop-text", text: loop.text });

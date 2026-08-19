@@ -1,6 +1,7 @@
 import type { App, TFile } from "obsidian";
 import type { LoopRef } from "./types";
 import { isISODate } from "./dates";
+import { findHeading, sectionEnd, shallowestHeadingLevel } from "./markdown";
 
 /**
  * Reading and completing open loops.
@@ -14,13 +15,28 @@ const OPEN_TASK = /^(\s*[-*+]\s+\[)( )(\]\s*)/;
 /** Either state, so a completed task can be found again and reopened. */
 const ANY_TASK = /^(\s*[-*+]\s+\[)([ xX])(\]\s*)/;
 
-/** Due dates as the Tasks plugin writes them (`📅 2026-08-20`) or a bare ISO date. */
+/**
+ * Due dates, most explicit first.
+ *
+ * The unmarked forms are anchored to the end of the line. Accepting a bare date
+ * *anywhere* meant any task that merely mentioned one had it deleted from its text
+ * and reported as a deadline: "recap the [[2026-01-24]] chat" rendered as "recap the
+ * [[]] chat", overdue by years. That shape is common here — dated wikilinks in a
+ * person's note are themselves a tracked interaction — so a date only reads as a due
+ * date when it carries a marker or trails the line.
+ */
 const DUE_PATTERNS = [
 	/(?:📅|⏳|🛫)\s*(\d{4}-\d{2}-\d{2})/u,
 	/\bdue\s*::?\s*(\d{4}-\d{2}-\d{2})/i,
-	/\((\d{4}-\d{2}-\d{2})\)/,
-	/\b(\d{4}-\d{2}-\d{2})\b/,
+	/\((\d{4}-\d{2}-\d{2})\)\s*$/,
+	/\b(\d{4}-\d{2}-\d{2})\s*$/,
 ];
+
+/**
+ * Placeholder for a set-aside wikilink. U+FFFC is OBJECT REPLACEMENT CHARACTER,
+ * which exists for exactly this and won't appear in a note.
+ */
+const LINK_SLOT = /\uFFFC(\d+)\uFFFC/g;
 
 export interface Loop {
 	ref: LoopRef;
@@ -72,27 +88,45 @@ export function locateTask(
 	return null;
 }
 
-/** Strip the task marker, trailing due-date syntax and wikilink brackets. */
-export function loopText(line: string): string {
-	let text = line.replace(ANY_TASK, "");
+/**
+ * A task line's words and its due date, in one pass.
+ *
+ * Wikilinks are set aside before the due date is looked for, so a date inside one is
+ * never mistaken for a deadline and stripping a deadline can never hollow a link out
+ * to `[[]]`. They come back as their display text.
+ */
+export function parseTask(line: string): { text: string; due: string | null } {
+	let body = line.replace(ANY_TASK, "");
+
+	const links: string[] = [];
+	body = body.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_match, target: string, alias?: string) => {
+		links.push(alias ?? target);
+		return `\uFFFC${links.length - 1}\uFFFC`;
+	});
+
+	let due: string | null = null;
 	for (const pattern of DUE_PATTERNS) {
-		const m = pattern.exec(text);
-		if (m) {
-			text = text.slice(0, m.index) + text.slice(m.index + m[0].length);
+		const m = pattern.exec(body);
+		if (m && isISODate(m[1])) {
+			due = m[1];
+			body = body.slice(0, m.index) + body.slice(m.index + m[0].length);
 			break;
 		}
 	}
-	// Show the display text of a link, not its target syntax.
-	text = text.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2").replace(/\[\[([^\]]+)\]\]/g, "$1");
-	return text.trim();
+
+	body = body.replace(LINK_SLOT, (_match, index: string) => links[Number(index)] ?? "");
+	// Collapse the gap a removed due date leaves behind.
+	return { text: body.replace(/\s+/g, " ").trim(), due };
 }
 
+/** Just the words. Kept as a seam for tests. */
+export function loopText(line: string): string {
+	return parseTask(line).text;
+}
+
+/** Just the due date. Kept as a seam for tests. */
 export function loopDue(line: string): string | null {
-	for (const pattern of DUE_PATTERNS) {
-		const m = pattern.exec(line);
-		if (m && isISODate(m[1])) return m[1];
-	}
-	return null;
+	return parseTask(line).due;
 }
 
 /**
@@ -128,9 +162,9 @@ export async function readLoops(app: App, refs: LoopRef[]): Promise<Loop[]> {
 			const span = locateTask(content, ref, ANY_TASK);
 			if (!span) continue;
 			const line = content.slice(span[0], span[1]);
-			const text = loopText(line);
+			const { text, due } = parseTask(line);
 			if (text.length === 0) continue;
-			out.push({ ref, text, due: loopDue(line), done: !OPEN_TASK.test(line) });
+			out.push({ ref, text, due, done: !OPEN_TASK.test(line) });
 		}
 	}
 
@@ -171,57 +205,50 @@ export function appendFollowUp(content: string, heading: string, text: string): 
 
 /** Put one literal line at the end of `heading`'s section. */
 function appendLine(content: string, heading: string, task: string): string {
-	const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const headingRe = new RegExp(`^(#{1,6})\\s+${escaped}\\s*$`, "im");
-	const match = headingRe.exec(content);
+	// Fence-aware, via the shared scanner. A line-scanning regex matched a heading
+	// shown as an example inside a code fence, and wrote the task into the fence —
+	// where Obsidian never parses it as a task, so it was invisible to the index while
+	// the user was told it had been added.
+	const found = findHeading(content, heading);
 
-	if (!match) {
-		const level = shallowestHeading(content);
-		const gap = content.length === 0 || content.endsWith("\n\n") ? "" : content.endsWith("\n") ? "\n" : "\n\n";
+	if (!found) {
+		const level = shallowestHeadingLevel(content);
+		const gap =
+			content.length === 0 || content.endsWith("\n\n") ? "" : content.endsWith("\n") ? "\n" : "\n\n";
 		return `${content}${gap}${"#".repeat(level)} ${heading}\n${task}\n`;
 	}
 
-	// Insert after the heading's existing lines so the newest follow-up is last,
-	// stopping at the next heading of any level.
-	const bodyStart = match.index + match[0].length;
-	const rest = content.slice(bodyStart);
-	const next = /\n#{1,6}\s/.exec(rest);
-	const sectionEnd = next ? bodyStart + next.index : content.length;
-	const section = content.slice(bodyStart, sectionEnd);
-	const trimmed = section.replace(/\s+$/, "");
-	return content.slice(0, bodyStart) + trimmed + `\n${task}\n` + content.slice(sectionEnd);
-}
-
-/** Match the note's own heading depth so a new section doesn't outrank the rest. */
-function shallowestHeading(content: string): number {
-	let level = 2;
-	const re = /^(#{1,6})\s+\S/gm;
-	let m: RegExpExecArray | null;
-	let found = 7;
-	while ((m = re.exec(content)) !== null) found = Math.min(found, m[1].length);
-	if (found <= 6) level = found;
-	return level;
+	// Insert at the end of the heading's own section, so the newest is last.
+	const bodyStart = found.afterLine;
+	const end = sectionEnd(content, found);
+	const section = content.slice(bodyStart, end);
+	// Trailing blank lines are the user's spacing; keep them after the new item.
+	const trailing = /(\s*)$/.exec(section)?.[1] ?? "";
+	const body = section.slice(0, section.length - trailing.length);
+	const separator = body.length === 0 || body.endsWith("\n") ? "" : "\n";
+	return content.slice(0, bodyStart) + body + separator + `${task}\n` + trailing + content.slice(end);
 }
 
 /**
  * Whether a note already has a section under `heading`.
  *
- * Used to avoid writing the reach-out block twice into the same note.
+ * Used to avoid writing the reach-out block twice into the same note. Fence-aware,
+ * so a daily-note template that *documents* the block's format inside a code fence
+ * doesn't read as already having one.
  */
 export function hasHeading(content: string, heading: string): boolean {
-	const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	return new RegExp(`^#{1,6}\\s+${escaped}\\s*$`, "im").test(content);
+	return findHeading(content, heading) !== null;
 }
 
 /**
- * Append a block of lines under `heading`, creating the heading if absent.
+ * Append several lines under `heading`, creating the heading if absent.
  *
- * Shares appendFollowUp's placement rules so both write the same shape.
+ * One insertion, not one per line: appending individually re-scanned and rebuilt the
+ * whole document for every line, which is quadratic in the block's length.
  */
 export function appendUnder(content: string, heading: string, lines: string[]): string {
-	let out = content;
-	for (const line of lines) out = appendLine(out, heading, line);
-	return out;
+	if (lines.length === 0) return content;
+	return appendLine(content, heading, lines.join("\n"));
 }
 
 export function loopFile(app: App, ref: LoopRef): TFile | null {

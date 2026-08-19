@@ -3,7 +3,15 @@
 
 /* Two panes: fixed chrome, scrolling list. The view itself never scrolls, so
    rows are clipped by the list's own box and cannot appear above the header. */
+/*
+ * A query container, so the narrow-layout rules below measure *this pane* rather than
+ * the window. They were written for a sidebar and never fired in one: a media query
+ * measures the viewport, so a 320px sidebar in a 1100px window kept the wide layout,
+ * overflowed, and clipped the sort control out of reach behind `overflow: hidden`.
+ * Obsidian's own app.css uses container queries for the same reason.
+ */
 .prm-view {
+	container-type: inline-size;
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -43,18 +51,26 @@
 	font-size: 1.25rem;
 }
 
+/* Wraps rather than overflowing: eight controls don't fit a sidebar, and
+   `.prm-view { overflow: hidden }` means anything past the edge is unreachable. */
 .prm-header-buttons {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 0.4rem;
+	min-width: 0;
 }
 
+/*
+ * Layout only. The colours come from Obsidian's own `mod-cta`, added in TS: setting
+ * `background`/`color` here loses to `button:not(.clickable-icon)` at rest but *wins*
+ * on `:hover` (equal specificity, later sheet), so the button sat grey and flashed
+ * accent under the cursor. On a light theme it was white-on-white.
+ */
 .prm-primary-btn {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.35rem;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
 	font-weight: 600;
 }
 
@@ -124,7 +140,8 @@
 /* Also buttons, so also outranked by the app's own button styling — a flat tab row
    was rendering as a row of raised grey buttons. */
 .prm-tabs .prm-tab,
-.prm-controls .prm-tab {
+.prm-controls .prm-tab,
+.prm-cal-controls .prm-tab {
 	background: transparent;
 	box-shadow: none;
 	color: var(--text-muted);
@@ -134,12 +151,14 @@
 }
 
 .prm-tabs .prm-tab:hover,
-.prm-controls .prm-tab:hover {
+.prm-controls .prm-tab:hover,
+.prm-cal-controls .prm-tab:hover {
 	background: var(--background-modifier-hover);
 }
 
 .prm-tabs .prm-tab-active,
-.prm-controls .prm-tab-active {
+.prm-controls .prm-tab-active,
+.prm-cal-controls .prm-tab-active {
 	background: var(--background-modifier-active-hover);
 	color: var(--text-normal);
 	font-weight: 600;
@@ -147,6 +166,7 @@
 
 .prm-controls {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 0.4rem;
 }
@@ -307,10 +327,34 @@
  * rule, which a single class does outrank, but it's set here for the same reason:
  * a chip hugs its text rather than standing at input height.
  */
+/*
+ * Obsidian's `button:not(.clickable-icon)` sets **three** properties —
+ * background-color, box-shadow and `color` — all at (0,1,1). The first fix here
+ * covered the first two and left the chip's text and border neutral grey, so a tier
+ * chip lost its colour and the "unknown tier" chip stopped being red. `color` needs
+ * the same two-class treatment, and so does each modifier that only sets `color`.
+ */
 .prm-chip.prm-chip-button {
 	background-color: transparent;
 	box-shadow: none;
 	height: auto;
+	color: var(--prm-chip-color);
+}
+
+.prm-chip.prm-chip-muted {
+	color: var(--text-faint);
+}
+
+.prm-chip.prm-chip-overdue {
+	color: var(--text-error);
+}
+
+.prm-chip.prm-chip-soon {
+	color: var(--text-warning);
+}
+
+.prm-chip.prm-chip-done {
+	color: var(--text-success);
 }
 
 .prm-chip-muted {
@@ -529,6 +573,7 @@ a.prm-place:hover {
 /* --------------------------------------------------------------- calendar view */
 
 .prm-calview {
+	container-type: inline-size;
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -670,10 +715,16 @@ a.prm-place:hover {
  *     rendered a uniform, colourless grid while the legend's <span> swatches were
  *     correct the whole time.
  *
- * The ramp is derived from the theme's accent, not hardcoded: darker means more, and
- * mixing toward white at the light end and black at the dark end keeps the ramp
- * perceptually the same direction in light and dark themes (mixing toward the
- * *background* would invert on one of them).
+ * The ramp is derived from the theme's accent, not hardcoded: darker means more, each
+ * step mixing the accent toward the **pane background**.
+ *
+ * Toward the background, not toward absolute white and black. Mixing to the extremes
+ * keeps the four colours identical across themes — which sounds desirable and isn't,
+ * because it inverts the *contrast* ordering when the background flips. Measured
+ * against the pane, light ran 1.53 -> 7.37 (increasing, correct) while dark ran
+ * 10.15 -> 1.93: the emptiest cell shouted and the busiest nearly vanished, failing
+ * WCAG 1.4.11's 3:1 for a meaningful graphic. Mixing toward the background increases
+ * in both, by construction.
  *
  * Each level declares a literal before the mix. That fallback works here where it
  * wouldn't for a var(): an unsupported color-mix() is a *parse* error, which does
@@ -696,22 +747,22 @@ a.prm-place:hover {
 
 .prm-cal-l1 {
 	--prm-cell-bg: #c6e48b;
-	--prm-cell-bg: color-mix(in srgb, var(--interactive-accent, #7f6df2) 38%, #fff);
+	--prm-cell-bg: color-mix(in srgb, var(--interactive-accent, #7f6df2) 28%, var(--background-primary));
 }
 
 .prm-cal-l2 {
 	--prm-cell-bg: #7bc96f;
-	--prm-cell-bg: color-mix(in srgb, var(--interactive-accent, #7f6df2) 72%, #fff);
+	--prm-cell-bg: color-mix(in srgb, var(--interactive-accent, #7f6df2) 52%, var(--background-primary));
 }
 
 .prm-cal-l3 {
 	--prm-cell-bg: #49af5d;
-	--prm-cell-bg: var(--interactive-accent, #7f6df2);
+	--prm-cell-bg: color-mix(in srgb, var(--interactive-accent, #7f6df2) 76%, var(--background-primary));
 }
 
 .prm-cal-l4 {
 	--prm-cell-bg: #196127;
-	--prm-cell-bg: color-mix(in srgb, var(--interactive-accent, #7f6df2) 62%, #000);
+	--prm-cell-bg: var(--interactive-accent, #7f6df2);
 }
 
 /* A future or missing period isn't a period yet: no fill and not even the empty
@@ -770,6 +821,26 @@ a.prm-place:hover {
 .prm-cal-person {
 	color: var(--text-accent);
 	cursor: pointer;
+}
+
+/*
+ * Focus rings.
+ *
+ * Obsidian sets `button { outline: none }` and paints focus with a box-shadow — which
+ * the plugin's own `box-shadow: none` overrides at higher specificity, so the filter
+ * tabs, tier chips, bulk buttons and every calendar cell had no visible focus at all.
+ * `outline` is uncontested here, so these are additive rather than a fight.
+ */
+.prm-tabs .prm-tab:focus-visible,
+.prm-controls .prm-tab:focus-visible,
+.prm-cal-controls .prm-tab:focus-visible,
+.prm-chip.prm-chip-button:focus-visible,
+.prm-bulkbar button:focus-visible,
+.prm-calview .prm-cal-table .prm-cal-cell:focus-visible,
+.prm-loop-check:focus-visible,
+.prm-select:focus-visible {
+	outline: 2px solid var(--text-accent);
+	outline-offset: 1px;
 }
 
 /* ------------------------------------------------------------------ follow-ups */
@@ -1180,7 +1251,7 @@ a.prm-place:hover {
 
 /* Row actions are revealed on hover, which touch devices don't have — and the
    single-line row has nowhere near enough width on a phone. */
-@media (max-width: 700px) {
+@container (max-width: 700px) {
 	.prm-chrome {
 		padding: 0.5rem 0.5rem 0;
 	}
@@ -1269,7 +1340,7 @@ a.prm-place:hover {
 	min-height: 8rem;
 }
 
-@media (max-width: 700px) {
+@container (max-width: 700px) {
 	.prm-note-input {
 		min-height: 5rem;
 	}
@@ -1362,7 +1433,9 @@ a.prm-place:hover {
 	font-size: var(--font-ui-smaller);
 }
 
-.prm-bulk-clear {
+/* Same cascade problem: all three of these lose to the app's button rule at one
+   class, so it renders as a grey button rather than a ghost link. */
+.prm-bulkbar .prm-bulk-clear {
 	margin-left: auto;
 	background: transparent;
 	box-shadow: none;
@@ -1384,7 +1457,7 @@ a.prm-place:hover {
 	text-decoration: underline;
 }
 
-@media (max-width: 700px) {
+@container (max-width: 700px) {
 	.prm-bulkbar-active {
 		gap: 0.3rem;
 	}

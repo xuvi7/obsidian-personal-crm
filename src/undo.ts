@@ -25,7 +25,8 @@ export interface UndoEntry {
 }
 
 export type UndoResult =
-	| { ok: true; label: string }
+	/** `note` carries a caveat about an otherwise successful reversal. */
+	| { ok: true; label: string; note?: string }
 	| { ok: false; reason: string; retryable: boolean };
 
 const DEFAULT_MAX_ENTRIES = 50;
@@ -190,6 +191,15 @@ export class UndoManager {
 						touched = true;
 					}
 				}
+				// Created files too. Without this, undoing a rename-then-import left the
+				// note behind (nothing at the old path to remove) and redo re-created it
+				// at the old path — two notes for one person.
+				for (const created of entry.created) {
+					if (created.path === oldPath) {
+						created.path = newPath;
+						touched = true;
+					}
+				}
 			}
 		}
 		if (touched) this.emit();
@@ -210,17 +220,29 @@ export class UndoManager {
 		await this.app.fileManager.trashFile(file);
 	}
 
-	/** Put a created note back, for redo. */
-	private async restoreCreated(created: CreatedFile): Promise<void> {
+	/**
+	 * Put a created note back, for redo.
+	 *
+	 * Refuses to overwrite a note that isn't empty and isn't what we wrote — the
+	 * mirror of `removeCreated`'s rule, and it has to be, because that method
+	 * deliberately *leaves* an edited note in place while still reporting the undo as
+	 * successful. The entry then sits on the redo stack pointing at the user's own
+	 * work, and overwriting it here destroyed it silently.
+	 */
+	private async restoreCreated(created: CreatedFile): Promise<boolean> {
 		const existing = this.app.vault.getAbstractFileByPath(created.path);
 		if (existing instanceof TFile) {
-			await this.queue.run(created.path, async () => {
+			return this.queue.run(created.path, async () => {
+				const current = await this.app.vault.read(existing);
+				// Ours, or an empty shell we can safely fill.
+				if (current !== created.content && current.trim().length > 0) return false;
 				await this.app.vault.process(existing, () => created.content);
+				return true;
 			});
-			return;
 		}
-		await this.queue.run(created.path, async () => {
+		return this.queue.run(created.path, async () => {
 			await this.app.vault.create(created.path, created.content);
+			return true;
 		});
 	}
 
@@ -260,6 +282,8 @@ export class UndoManager {
 		}
 
 		const written: { file: TFile; rollback: string }[] = [];
+		// Created notes a redo declined to overwrite because the user had edited them.
+		const skippedCreated: string[] = [];
 		try {
 			for (const { file, content, rollback } of pending) {
 				await this.queue.run(file.path, async () => {
@@ -270,7 +294,7 @@ export class UndoManager {
 			// Undo removes what the action created; redo puts it back.
 			for (const c of entry.created) {
 				if (target === "before") await this.removeCreated(c);
-				else await this.restoreCreated(c);
+				else if (!(await this.restoreCreated(c))) skippedCreated.push(c.path);
 			}
 		} catch (err) {
 			for (const { file, rollback } of written.reverse()) {
@@ -291,6 +315,26 @@ export class UndoManager {
 			};
 		}
 
+		if (skippedCreated.length > 0) {
+			// Reported rather than swallowed: the redo did happen, but a note it would
+			// have rewritten is the user's now, and silently keeping either version
+			// would be a lie.
+			return {
+				ok: true,
+				label: entry.label,
+				note: `${listPaths(skippedCreated)} had been edited, so ${
+					skippedCreated.length === 1 ? "it was" : "they were"
+				} left as ${skippedCreated.length === 1 ? "it is" : "they are"}.`,
+			};
+		}
+
 		return { ok: true, label: entry.label };
 	}
+}
+
+/** Basenames, for a message: "Zoe.md and Ana.md". */
+function listPaths(paths: string[]): string {
+	const names = paths.map((p) => p.split("/").pop() ?? p);
+	if (names.length === 1) return names[0];
+	return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }

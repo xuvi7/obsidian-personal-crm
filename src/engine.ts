@@ -84,10 +84,10 @@ export class PrmEngine {
 		if (this.index.has(file.path)) return true;
 
 		for (const folder of this.settings.personFolders) {
-			if (folder.length > 0 && isInFolder(file.path, folder)) return true;
+			if (isInFolder(file.path, folder)) return true;
 		}
 		for (const source of this.settings.journalSources) {
-			if (source.folder.length > 0 && isInFolder(file.path, source.folder)) return true;
+			if (isInFolder(file.path, source.folder)) return true;
 		}
 
 		// A note can become a person by gaining a tag or type marker.
@@ -121,7 +121,7 @@ export class PrmEngine {
 	 */
 	dateOfJournalNote(file: TFile): string | null {
 		const inJournal = this.settings.journalSources.some(
-			(s) => s.folder.length > 0 && isInFolder(file.path, s.folder),
+			(s) => isInFolder(file.path, s.folder),
 		);
 		if (!inJournal) return null;
 		return this.dateForNote(file, this.app.metadataCache.getFileCache(file));
@@ -153,6 +153,11 @@ export class PrmEngine {
 		const people = new Map<string, PersonRecord>();
 		let skipped = 0;
 
+		// An empty journal folder means the vault root — `isInFolder` documents that,
+		// and core Daily Notes leaves the folder empty when the user never moved it.
+		// Guarding these call sites with `folder.length > 0` inverted that: a root
+		// daily-notes vault matched *nothing*, so contact history was silently and
+		// completely disabled, with no diagnostic (missingFolders skips "" too).
 		const files = this.app.vault.getMarkdownFiles();
 		const journalCandidates: TFile[] = [];
 		// Files holding open tasks, gathered here because this pass already has each
@@ -168,7 +173,7 @@ export class PrmEngine {
 		// One pass, classifying each file once.
 		for (const file of files) {
 			const inJournal = this.settings.journalSources.some(
-				(s) => s.folder.length > 0 && isInFolder(file.path, s.folder),
+				(s) => isInFolder(file.path, s.folder),
 			);
 			if (inJournal) journalCandidates.push(file);
 
@@ -362,7 +367,7 @@ export class PrmEngine {
 
 	private dateForNote(file: TFile, cache: CachedMetadata | null): string | null {
 		const source = this.settings.journalSources.find(
-			(s) => s.folder.length > 0 && isInFolder(file.path, s.folder),
+			(s) => isInFolder(file.path, s.folder),
 		);
 		const fromName = parseJournalDate(
 			file.basename,
@@ -504,12 +509,22 @@ export class PrmEngine {
 		const fm = frontmatterOf(cache);
 		const K = FRONTMATTER_KEYS;
 
-		const rawCadence = Number(fm[K.cadence]);
+		// Bounded, not just positive: a cadence of 1e11 overflowed addDays to an
+		// Invalid Date, which formatted as the string "NaN-NaN-NaN" and then read back
+		// as overdue. A century is past any real cadence.
+		const rawCadence = Number(asText(fm[K.cadence]));
 		const cadenceOverride =
-			Number.isFinite(rawCadence) && rawCadence >= 1 ? Math.round(rawCadence) : null;
+			Number.isFinite(rawCadence) && rawCadence >= 1 && rawCadence <= MAX_CADENCE_DAYS
+				? Math.round(rawCadence)
+				: null;
 
+		// `coerceISODate` first, so the link-wrapped and compact forms that Dataview
+		// and Templater setups produce give a countdown like every other date field.
+		// A bare `MM-DD` isn't a full date, so it falls through to the raw text.
 		const birthdayText = asText(fm[K.birthday])?.trim();
-		const birthday = birthdayText && birthdayText.length > 0 ? birthdayText : null;
+		const birthday =
+			coerceISODate(fm[K.birthday]) ??
+			(birthdayText && birthdayText.length > 0 ? birthdayText : null);
 
 		let createdDate: string | null = null;
 		let baselineSource: BaselineSource = "none";
@@ -687,7 +702,11 @@ export class PrmEngine {
 		// One entry per date, so two notes on the same day aren't two interactions.
 		record.mentionCount = record.sources.size;
 		record.contactDates = Array.from(record.sources.keys()).sort().reverse();
-		record.lastContact = record.contactDates[0] ?? null;
+		// Not the newest date — the newest date that has actually happened. A dinner
+		// booked for next January is a real link in a real note, and taking it as last
+		// contact reset the cadence clock forward and dropped the person out of the
+		// queue until then.
+		record.lastContact = record.contactDates.find((d) => d <= today) ?? null;
 		if (record.lastContact) record.baselineSource = "contact";
 
 		if (record.birthday) {
@@ -912,8 +931,21 @@ function inAnyRange(offset: number, ranges: Range[]): boolean {
 	return false;
 }
 
+/** Any real cadence is well under this; beyond it, date arithmetic overflows. */
+const MAX_CADENCE_DAYS = 36_500;
+
 /** A rhythm needs at least this many gaps before a median says anything. */
 const MIN_GAPS = 3;
+
+/** A median rather than a mean, so one long silence can't redefine the rhythm. */
+function medianOf(gaps: number[]): number | null {
+	if (gaps.length === 0) return null;
+	const sorted = [...gaps].sort((a, b) => a - b);
+	const mid = Math.floor(sorted.length / 2);
+	const median =
+		sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid];
+	return median > 0 ? median : null;
+}
 
 /**
  * How much time the measured gaps must cover.
@@ -953,28 +985,36 @@ export function typicalGap(contactDates: string[]): number | null {
 	// date is converted once and reused as the next pair's other end, rather than
 	// being parsed again by a second diffDays call.
 	const gaps: number[] = [];
-	let span = 0;
 	let previous = dayNumber(contactDates[0]);
+	let rhythm: number | null = null;
+
 	for (let i = 1; i < contactDates.length && gaps.length < MAX_GAPS; i++) {
 		const current = dayNumber(contactDates[i]);
 		if (current === null) continue;
 		if (previous !== null) {
 			const gap = previous - current;
-			if (gap > 0) {
-				gaps.push(gap);
-				span += gap;
-			}
+			if (gap > 0) gaps.push(gap);
 		}
 		previous = current;
-		if (gaps.length >= MIN_GAPS && span >= MIN_SPAN_DAYS) break;
-	}
-	if (gaps.length < MIN_GAPS || span < MIN_SPAN_DAYS) return null;
 
-	gaps.sort((a, b) => a - b);
-	const mid = Math.floor(gaps.length / 2);
-	const median =
-		gaps.length % 2 === 0 ? Math.round((gaps[mid - 1] + gaps[mid]) / 2) : gaps[mid];
-	return median > 0 ? median : null;
+		if (gaps.length < MIN_GAPS) continue;
+
+		// Stop when the rhythm *itself* accounts for enough time: the median gap,
+		// repeated across the window, must span at least three weeks.
+		//
+		// Summing the raw gaps instead let the one long gap that closes the window
+		// satisfy the requirement single-handed — three daily mentions plus a contact a
+		// month earlier gave [1, 1, 31], which passed on a span of 33 and reported
+		// "usually every 1d". That is the burst this test exists to reject. Measured
+		// this way it needs 21 one-day gaps, i.e. three actual weeks of daily contact.
+		const candidate = medianOf(gaps);
+		if (candidate !== null && candidate * gaps.length >= MIN_SPAN_DAYS) {
+			rhythm = candidate;
+			break;
+		}
+	}
+
+	return rhythm;
 }
 
 /**

@@ -76,15 +76,6 @@ export function addDays(iso: string, days: number): string {
 	return fromUTC(u + days * MS_PER_DAY);
 }
 
-/** Largest of the given ISO dates. Lexicographic order works for YYYY-MM-DD. */
-export function maxISO(...values: (string | null | undefined)[]): string | null {
-	let best: string | null = null;
-	for (const v of values) {
-		if (v && isISODate(v) && (best === null || v > best)) best = v;
-	}
-	return best;
-}
-
 /**
  * Pull a valid YYYY-MM-DD out of the shapes that actually turn up in
  * frontmatter. Deliberately conservative: ambiguous slash forms like `08/15/2026`
