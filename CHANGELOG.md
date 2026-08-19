@@ -3,7 +3,7 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 1.7.0 — 2026-08-19
 
 ### Changed
 
@@ -16,6 +16,18 @@ All notable changes to Personal CRM. Versions follow
 - **Text fields reach 16px on mobile**, because below that iOS zooms the whole pane
   whenever a field takes focus — so logging a contact meant pinching back out
   afterwards. Affected the note, date and follow-up boxes.
+- **A phone gets a much shorter header.** It was taking about 700px of an 804px pane,
+  which left room for one and a half people: a title Obsidian's own view header already
+  shows, two wrapped rows of buttons, two of stats, two of filter tabs, then the
+  toolbar. The title goes, the buttons become an icon-only row, and the tabs and stats
+  each become one horizontally-scrolling row. 700px of chrome becomes 196px, and six
+  people fit where one and a half did.
+- **On a phone the per-row icon buttons are gone.** Unusable at 21×28, a whole line per
+  row at 44px, and every one of them is already in the panel that tapping the row
+  opens — which is the fast path on a touch device. Tablets and desktops keep them.
+- Calendar days go from 13px to 22px, and the month and year scales grow to match.
+  Tapping a day already revealed who it was; that now works with a finger, and the
+  scale tabs are full-height.
 - **Selecting people on a phone no longer buries the list.** The bulk bar's six labelled
   buttons wrapped to three rows and sat *on top of* the filter chrome, so a selection took
   49% of the pane and left three people visible out of five. Selection is now a mode: the
@@ -30,25 +42,12 @@ All notable changes to Personal CRM. Versions follow
   select everyone in Due, switch to Drifting and select those too, which is the flow that
   makes Select all worth having mid-selection. It turns the accent colour while a search is
   narrowing the list.
-- On every platform, the bulk bar's separate "Clear" button is gone; the selection count
-  now carries an ✕ and does the same job in less space.
 - **"Select all" has moved out of the toolbar and into the selection bar**, so there is only
   one of them instead of two with the same name. It stays "Select all" in every state —
   it is never redundant, because changing the filter changes what "all" means. One
   consequence: selecting everything now starts by ticking a single row.
-
-- **A phone gets a much shorter header.** It was taking about 700px of an 804px pane,
-  which left room for one and a half people: a title Obsidian's own view header already
-  shows, two wrapped rows of buttons, two of stats, two of filter tabs, then the
-  toolbar. The title goes, the buttons become an icon-only row, and the tabs and stats
-  each become one horizontally-scrolling row. 700px of chrome becomes 196px, and six
-  people fit where one and a half did.
-- **On a phone the per-row icon buttons are gone.** Unusable at 21×28, a whole line per
-  row at 44px, and every one of them is already in the panel that tapping the row
-  opens — which is the fast path on a touch device. Tablets and desktops keep them.
-- Calendar days go from 13px to 22px, and the month and year scales grow to match.
-  Tapping a day already revealed who it was; that now works with a finger, and the
-  scale tabs are full-height.
+- On every platform, the bulk bar's separate "Clear" button is gone; the selection count
+  now carries an ✕ and does the same job in less space.
 - Sizing follows Obsidian's own `.is-mobile` / `.is-phone` body classes rather than a
   `pointer: coarse` media query, which Obsidian never uses. A laptop with a touchscreen
   keeps the desktop layout; a tablet gets the tap targets without the phone's
@@ -80,6 +79,20 @@ All notable changes to Personal CRM. Versions follow
   behind `overflow: hidden`. Affected every pane under 700px, not only phones.
 - Header buttons carry an `aria-label` and an icon each — previously "Reach out" had
   neither an aria-label nor, in Triage's case, an icon.
+
+### Internal
+
+- The browser harnesses under `tests/ui/` model the real thing far more closely, which is
+  what turned up several of the fixes above: they carry Obsidian's own leaf rules at their
+  real specificity, set the same `.is-mobile` / `.is-phone` body classes the app does
+  (`?device=phone`), and have a viewport meta — without which device emulation silently
+  laid a "390px phone" out at 940px. `npm run ui` builds them.
+- `npm test` covers the mobile invariants: that no touch token escapes onto the desktop,
+  that tap sizes are in px rather than rem, that text fields stay at 16px, and that the
+  layout bugs found here stay fixed.
+- Measured against the recorded budgets, phone against desktop in the same run at 3,000
+  people: selection change 0.166 ms against 0.138 ms, first paint 1.75 ms against 1.90 ms.
+  None of this release costs measurable performance.
 
 ## 1.6.0 — 2026-08-19
 

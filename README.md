@@ -28,6 +28,14 @@ plugins.
 Requires Obsidian 1.13.0 or newer. Older versions are served the newest release they
 can run, so 1.7–1.12 will get 1.1.0.
 
+**On phone and tablet** it reads the same vault and the same notes. A phone gets a
+layout of its own: the dashboard's chrome collapses to an icon toolbar and single
+scrolling strips, every tap target meets the 44px platform minimum, and selecting
+people swaps the filter controls for a one-line bar with the bulk actions in a sheet.
+A tablet keeps the desktop layout with the larger tap targets. To see the phone layout
+on a desktop, run **Emulate mobile** from the command palette and narrow the window
+below 600px — that is the width at which Obsidian itself switches from tablet to phone.
+
 Release assets are built in CI and carry [build provenance](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations),
 so you can check they came from this source:
 
@@ -467,7 +475,7 @@ npm test                               # typecheck + lint + 26 suites
 `PRM_OUT_DIR` sets the install target; without it the bundle lands in the repo
 root. Reload the plugin in Obsidian to pick up a new build.
 
-Tests live in `tests/`: ~550 assertions that bundle the real source and drive it
+Tests live in `tests/`: ~555 assertions that bundle the real source and drive it
 against a fake vault which stores real text and computes a realistic metadata
 cache. `npm test` runs them all; `node tests/test-drift.cjs` runs one. Set
 `PRM_TEST_VAULT` to also check the heuristics against a real vault.

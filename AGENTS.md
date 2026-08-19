@@ -397,7 +397,7 @@ that output when a suite actually fails.
 
 Each suite is a standalone Node script with its own tiny `check()` helper. They bundle the
 **real** source with esbuild and drive it against a fake vault (`tests/stub-obsidian.cjs`)
-that stores real text and computes a realistic metadata cache. ~550 assertions across 26
+that stores real text and computes a realistic metadata cache. ~555 assertions across 26
 files.
 
 Shared helpers live in `tests/build.cjs`:
@@ -492,6 +492,25 @@ Measured, and worth re-measuring rather than assuming. Vault: 2,372 files, 239 p
 | Selection change | **~0.2 ms** | Must not rebuild the list |
 | Calendar bucketing | **0.2–1 ms** | 3.9–11.8 ms at 200,000 interactions |
 | Person panel open | **~2 ms** | Includes reading follow-up text |
+| Bulk bar render | **~0.12 ms** | Runs on every tick and every debounced keystroke |
+
+Measured again after the mobile work, phone against desktop in the same harness run, at
+3,000 people:
+
+| Path | Desktop | Phone (`?device=phone`) |
+| --- | --- | --- |
+| Selection change | 0.138 ms | 0.166 ms |
+| Dashboard first paint | 1.90 ms | 1.75 ms |
+| Bulk bar render | 0.119 ms | 0.106 ms |
+
+So the phone stylesheet and the two-renderings-in-one-DOM trade cost nothing measurable.
+The bar is 73 nodes and 9 SVGs on both platforms; it was **not** switched to the cached
+`appendIcon` because that would save ~0.05 ms on a path already inside budget. Scaling with
+the selection is linear — at 3,000 selected the bar render is 0.255 ms and `selected()`
+0.14 ms — so the quadratic warned about below has not come back.
+
+**Warm the loop before believing a number.** The first unwarmed `renderAll()` at 3,000
+people reads ~6.9 ms against a warmed 1.75 ms, which looks exactly like a 2× regression.
 
 Rules of thumb learned the hard way:
 
@@ -529,6 +548,12 @@ would be *useful*, not merely correct.
 
 - **Conventional Commits**, always: `type(scope): summary`. Bodies are expected to be
   substantial — explain *why*, and record what was tried and rejected.
+- **Close every feature with a measurement and a docs pass**, unasked. Compare the changed
+  path against §6 in the *same* harness run (warm the loop first), and report "inside
+  budget, no change" with the numbers rather than optimising on a hunch. Then update
+  `AGENTS.md`, `CHANGELOG.md`, and `README.md` if the change is user-facing — and re-read
+  what you wrote earlier in the same session, because a design reversed halfway leaves
+  prose describing the version you abandoned.
 - **Never tag or publish a release** unless explicitly asked. Committing and pushing to
   `main` is fine. Releases run through `.github/workflows/release.yml`, which builds,
   attaches artifacts, attests provenance, and takes its notes from the matching
