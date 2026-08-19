@@ -24,7 +24,14 @@ class TFolder {
 }
 
 class Stub {
-  constructor(tag) { this.tag = tag; this.children = []; this.classes = new Set(); this.attrs = {}; this.text = ""; this.dataset = {}; }
+  constructor(tag) {
+    this.tag = tag; this.children = []; this.classes = new Set();
+    this.attrs = {}; this.text = ""; this.dataset = {};
+    // Non-enumerable, like the real DOM's parentElement: an enumerable back-reference
+    // makes the tree circular, and a test that JSON.stringify()s a node — several do,
+    // to build an assertion message — throws instead of reporting.
+    Object.defineProperty(this, "parent", { value: null, writable: true, enumerable: false });
+  }
   addClass(c) { this.classes.add(c); return this; }
   addClasses(cs) { cs.forEach((c) => this.classes.add(c)); return this; }
   removeClass(c) { this.classes.delete(c); return this; }
@@ -60,12 +67,35 @@ class Stub {
   contains() { return false; }
   // Real enough for tests: `.class`, `tag`, `tag.class`, and comma-separated lists.
   // Returning [] unconditionally meant a test could "pass" against nothing.
-  __matches(sel) {
+  /** One compound selector — `tag`, `.cls`, `tag.cls` — against this node alone. */
+  __matchesSimple(sel) {
     const parts = sel.trim().split(".");
     const tag = parts[0];
     const classes = parts.slice(1).filter(Boolean);
     if (tag && tag !== "*" && this.tag !== tag) return false;
     return classes.every((c) => this.classes.has(c));
+  }
+
+  /**
+   * A selector, including a descendant one like `.prm-header-buttons button`.
+   *
+   * Without the descendant case this returned false for any selector containing a
+   * space — silently, so `querySelectorAll(".prm-header-buttons button")` came back
+   * empty and every assertion over the result passed against nothing. That is the same
+   * failure mode as the `querySelectorAll` lie in AGENTS.md §5, one selector deeper.
+   */
+  __matches(sel) {
+    const parts = String(sel).trim().split(/\s+/);
+    if (!this.__matchesSimple(parts[parts.length - 1])) return false;
+    // Walk ancestors right to left; each remaining part must match some ancestor,
+    // in order.
+    let node = this.parent;
+    for (let i = parts.length - 2; i >= 0; i--) {
+      while (node && !node.__matchesSimple(parts[i])) node = node.parent;
+      if (!node) return false;
+      node = node.parent;
+    }
+    return true;
   }
   querySelectorAll(sel) {
     const wanted = String(sel).split(",").map((s) => s.trim()).filter(Boolean);
@@ -95,6 +125,7 @@ class Stub {
       if (o.placeholder !== undefined) e.placeholder = o.placeholder;
     }
     this.children.push(e);
+    e.parent = this;
     return e;
   }
   createDiv(o) { return this.createEl("div", o); }
@@ -206,7 +237,16 @@ function makeStub(notices) {
     },
     getLinkpath: (l) => l.split("#")[0].split("|")[0],
     normalizePath: (p) => p.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\.\//, "").normalize("NFC"),
-    setIcon: () => {},
+    // Real setIcon injects `<svg class="svg-icon lucide-NAME">` into the element, and
+    // view.ts's appendIcon reads `probe.firstElementChild` to cache a template — a
+    // no-op stub made that path untestable and made "does this button have an icon?"
+    // unanswerable. Records the name so a test can assert on it.
+    setIcon: (el, name) => {
+      if (!el || typeof el.createEl !== "function") return;
+      const svg = el.createEl("svg", { cls: `svg-icon lucide-${name}` });
+      svg.dataset.icon = name;
+      return svg;
+    },
     debounce: (fn) => {
       const f = (...a) => fn(...a);
       f.cancel = () => {};
