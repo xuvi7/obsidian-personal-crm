@@ -312,6 +312,36 @@ an 804px pane and leaving room for one and a half people:
 
 Chrome 700px → 196px, rows 190px → 144px, one and a half rows visible → six.
 
+**Selection is a mode.** A live selection used to add the bulk bar *on top of* the filter
+chrome: six labelled buttons wrapped to three rows, 157px on top of an already 232px
+chrome — 49% of the pane, three people visible out of five. On `.is-phone` the stats strip
+and the whole toolbar (tabs, Select all, search, sort) hide instead, because none of them is
+what you are using mid-selection, and the bar is one line:
+
+```
+partial:   2 selected   [Select all]   [Actions ⋯]
+all:      30 selected   [Clear]        [Actions ⋯]
+```
+
+Chrome 389px → 108px, so selecting shows **more** rows than not selecting (6 vs 5). Three
+things hold that together:
+
+- `renderBulkBar` toggles `.prm-selecting` on the view root. A class rather than `:has()`,
+  so it cannot depend on selector support, set from the one place the selection size
+  changes.
+- The count is the clear, and carries an `x` icon. The toggle beside it cannot serve as the
+  clear, because with a partial selection it reads "Select all" — so without this there is
+  no one-tap exit from a partial selection.
+- "Select all" is a no-op once everything listed is selected, so at that point the *same
+  slot* becomes "Clear" rather than sitting dead. That merge is what buys the single line.
+
+The six actions are defined once as `BulkAction[]` and rendered twice — as the button row a
+wide pane shows, and as `BulkActionsModal`'s rows on a phone. **Both are always in the DOM
+and CSS picks one**, so a resize across the phone/tablet boundary (which Obsidian
+re-evaluates live, §4.9) cannot leave the bar in the other width's shape. The sheet is
+labelled, not icon-only, because `tag` and `tags` are near-identical glyphs and getting
+Add/Remove tag wrong edits every selected note.
+
 Two traps that are not about size:
 
 - `.prm-row-meta` and `.prm-name-row` are **flex** containers, so `padding-block` on a link
@@ -352,7 +382,7 @@ that output when a suite actually fails.
 
 Each suite is a standalone Node script with its own tiny `check()` helper. They bundle the
 **real** source with esbuild and drive it against a fake vault (`tests/stub-obsidian.cjs`)
-that stores real text and computes a realistic metadata cache. ~530 assertions across 26
+that stores real text and computes a realistic metadata cache. ~550 assertions across 26
 files.
 
 Shared helpers live in `tests/build.cjs`:

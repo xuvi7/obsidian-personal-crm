@@ -467,7 +467,7 @@ npm test                               # typecheck + lint + 26 suites
 `PRM_OUT_DIR` sets the install target; without it the bundle lands in the repo
 root. Reload the plugin in Obsidian to pick up a new build.
 
-Tests live in `tests/`: ~530 assertions that bundle the real source and drive it
+Tests live in `tests/`: ~550 assertions that bundle the real source and drive it
 against a fake vault which stores real text and computes a realistic metadata
 cache. `npm test` runs them all; `node tests/test-drift.cjs` runs one. Set
 `PRM_TEST_VAULT` to also check the heuristics against a real vault.

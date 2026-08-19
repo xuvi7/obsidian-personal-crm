@@ -16,6 +16,19 @@ All notable changes to Personal CRM. Versions follow
 - **Text fields reach 16px on mobile**, because below that iOS zooms the whole pane
   whenever a field takes focus — so logging a contact meant pinching back out
   afterwards. Affected the note, date and follow-up boxes.
+- **Selecting people on a phone no longer buries the list.** The bulk bar's six labelled
+  buttons wrapped to three rows and sat *on top of* the filter chrome, so a selection took
+  49% of the pane and left three people visible out of five. Selection is now a mode: the
+  stats strip, filter tabs, search and sort hide — none of them is what you are using
+  mid-selection — and the bar is a single line reading `2 selected · Select all ·
+  Actions ⋯`. Chrome goes from 389px to 108px, so selecting shows *more* rows than not
+  selecting. Tapping the count clears the selection; "Select all" becomes "Clear" once
+  everything listed is selected, since it would otherwise be a button that does nothing.
+  "Actions ⋯" opens a sheet with all six actions at full width and labelled — an icon-only
+  bar would have made Add tag and Remove tag indistinguishable, as `tag` and `tags` are
+  near-identical glyphs. Tablets and desktops keep the button row.
+- On every platform, the bulk bar's separate "Clear" button is gone; the selection count
+  now carries an ✕ and does the same job in less space.
 - **A phone gets a much shorter header.** It was taking about 700px of an 804px pane,
   which left room for one and a half people: a title Obsidian's own view header already
   shows, two wrapped rows of buttons, two of stats, two of filter tabs, then the
