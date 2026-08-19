@@ -449,6 +449,12 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 
+**Working on the code?** Read [`AGENTS.md`](AGENTS.md) first. It documents the
+architecture, the invariants that must not be broken, the Obsidian platform traps that
+have already cost time (CSS specificity against the app's own button rules, `var()`
+failure modes, when a plugin reload is required), the performance budgets, and where the
+tests live.
+
 ```bash
 npm install
 npm run build                          # typecheck + bundle
