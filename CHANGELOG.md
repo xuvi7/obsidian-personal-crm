@@ -3,7 +3,7 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 1.6.0 — 2026-08-19
 
 ### Added
 
@@ -48,8 +48,71 @@ All notable changes to Personal CRM. Versions follow
   shape of a relationship — "daily for three months then nothing" and "every
   fortnight for years, quiet lately" have the same rhythm figure and mean different
   things — and a thumbnail is enough to tell them apart.
+- **Reach-outs written into your daily note**, off by default. When a dated note
+  for today is created, who's overdue goes in as unchecked tasks under a heading
+  you choose. A link in an open task already doesn't count as contact, so the nudge
+  can't silence the reminder that produced it — and ticking the box makes it a
+  completed task, which does count, so the gesture that means "done" is the one
+  that logs it.
+- Tasks under that heading are excluded from the Follow-ups tab, since they restate
+  the Due tab and would accumulate daily. Turning the nudge off makes existing
+  blocks ordinary follow-ups again.
+- `Add today's reach-outs to this note` command, for notes that already exist.
+  Running it twice won't stack a second block.
+- **Places.** Where someone is, read from `prm-location` or whichever key the
+  vault already uses (`location`, `city`, `based-in`, configurable). Shown on the
+  row as `@Lisbon` and clickable to filter; an `@`-prefixed search matches places
+  only, by substring, so `@NY` finds "Brooklyn, NY".
+- **Who's in…** command: pick a place from the ones your vault records, with a
+  count for each, and see everyone there sorted by who's most overdue.
+- **Set place** on one person from their panel, or on a whole selection from the
+  bulk bar. It writes `prm-location` even when a plain `location` exists, so the
+  contact importer's own field is left to the importer.
+- **Follow-ups.** An unchecked task counts as an open follow-up for a person when
+  it lives in their own note or links to them from anywhere in the vault. They show
+  as a chip on the row, get a **Follow-ups** tab, and are listed in the person
+  panel where ticking one writes `- [x]` back to whichever note holds it. Due dates
+  are read from `📅 2026-08-20`, `due:: 2026-08-20` or `(2026-08-20)`.
+- **Add follow-up** in the person panel, writing `- [ ] …` under a configurable
+  heading in the person's note — so the feature works without having to adopt a
+  task syntax first.
+- Completing a follow-up whose task has since moved or changed is declined and
+  triggers a reindex, rather than ticking off whatever took its place.
+
+- **Multi-select.** Cmd/Ctrl-click a row or tick its checkbox to select it;
+  shift-click extends a range through the rows currently on screen. **Select all**
+  takes whatever the filter is showing, so you can narrow first and select second.
+- **Bulk actions** on a selection: log contact, set cadence, add tag, remove tag
+  and snooze. Each lands as a **single undo step** rather than one per person, and
+  bulk logging asks for a date and note once and applies both to everyone.
+  A person whose note has gone missing is reported without sinking the rest.
+- **Tags**, as ordinary Obsidian tags — read and written in the note's own `tags:`
+  frontmatter, so they're the same tags the tag pane, `tag:` search, graph filters
+  and Dataview already see. Shown as chips on each row; click to filter, click
+  again to clear. The marker tags that identify person notes are left out of the
+  chips so they don't appear on everyone.
+- **Sort by tag**, grouping people by their first tag with untagged people last.
+- A **person panel** on clicking a row: the note's own content, a date and notes
+  box for logging, and one click each to cadence, snooze, tags and the note. The
+  row's icon buttons stay for the fast path.
+- Searching with a leading `#` matches **tags only**, so `#gym` doesn't also match
+  someone whose relationship reads "climbing gym".
 
 ### Fixed
+
+- **Markdown-style links now count as contact.** With Obsidian's "Use \[\[Wikilinks]]"
+  setting off, links are written as `[Bob](People/Bob.md)` — and none of them were
+  attributed to anyone, because the person lookup only knew extension-less names and
+  paths and a miss was final. For a vault with that setting off the effect was no
+  contact history at all, indistinguishable from having nothing to show. Percent-encoded
+  targets (`People/Ana%20Diaz.md`), angle-bracketed ones, and `[[Bob.md]]` are handled
+  too, and follow-ups in such notes are attributed as well. External links and embeds
+  are still not contact.
+- **Ticking a follow-up can no longer complete a different one.** The write located the
+  task by its recorded byte offset, so inserting a line above a to-do list shifted every
+  offset onto a neighbouring line — which, in a list of tasks, is also a task, so the
+  checks passed and the wrong item was ticked off. The write now also requires the task's
+  words to match what the panel displayed, and declines as stale otherwise.
 
 - **Follow-ups can be un-ticked.** Completing one wrote `[x]` and disabled the
   checkbox, and since the index drops a completed task there was no way back from a
@@ -114,55 +177,6 @@ All notable changes to Personal CRM. Versions follow
 - Year rows in the calendar are contiguous even where a year is empty, rather than
   listing only years with data; interactions older than the range are reported as a
   count instead of being dropped.
-- **Reach-outs written into your daily note**, off by default. When a dated note
-  for today is created, who's overdue goes in as unchecked tasks under a heading
-  you choose. A link in an open task already doesn't count as contact, so the nudge
-  can't silence the reminder that produced it — and ticking the box makes it a
-  completed task, which does count, so the gesture that means "done" is the one
-  that logs it.
-- Tasks under that heading are excluded from the Follow-ups tab, since they restate
-  the Due tab and would accumulate daily. Turning the nudge off makes existing
-  blocks ordinary follow-ups again.
-- `Add today's reach-outs to this note` command, for notes that already exist.
-  Running it twice won't stack a second block.
-- **Places.** Where someone is, read from `prm-location` or whichever key the
-  vault already uses (`location`, `city`, `based-in`, configurable). Shown on the
-  row as `@Lisbon` and clickable to filter; an `@`-prefixed search matches places
-  only, by substring, so `@NY` finds "Brooklyn, NY".
-- **Who's in…** command: pick a place from the ones your vault records, with a
-  count for each, and see everyone there sorted by who's most overdue.
-- **Set place** on one person from their panel, or on a whole selection from the
-  bulk bar. It writes `prm-location` even when a plain `location` exists, so the
-  contact importer's own field is left to the importer.
-- **Follow-ups.** An unchecked task counts as an open follow-up for a person when
-  it lives in their own note or links to them from anywhere in the vault. They show
-  as a chip on the row, get a **Follow-ups** tab, and are listed in the person
-  panel where ticking one writes `- [x]` back to whichever note holds it. Due dates
-  are read from `📅 2026-08-20`, `due:: 2026-08-20` or `(2026-08-20)`.
-- **Add follow-up** in the person panel, writing `- [ ] …` under a configurable
-  heading in the person's note — so the feature works without having to adopt a
-  task syntax first.
-- Completing a follow-up whose task has since moved or changed is declined and
-  triggers a reindex, rather than ticking off whatever took its place.
-
-- **Multi-select.** Cmd/Ctrl-click a row or tick its checkbox to select it;
-  shift-click extends a range through the rows currently on screen. **Select all**
-  takes whatever the filter is showing, so you can narrow first and select second.
-- **Bulk actions** on a selection: log contact, set cadence, add tag, remove tag
-  and snooze. Each lands as a **single undo step** rather than one per person, and
-  bulk logging asks for a date and note once and applies both to everyone.
-  A person whose note has gone missing is reported without sinking the rest.
-- **Tags**, as ordinary Obsidian tags — read and written in the note's own `tags:`
-  frontmatter, so they're the same tags the tag pane, `tag:` search, graph filters
-  and Dataview already see. Shown as chips on each row; click to filter, click
-  again to clear. The marker tags that identify person notes are left out of the
-  chips so they don't appear on everyone.
-- **Sort by tag**, grouping people by their first tag with untagged people last.
-- A **person panel** on clicking a row: the note's own content, a date and notes
-  box for logging, and one click each to cadence, snooze, tags and the note. The
-  row's icon buttons stay for the fast path.
-- Searching with a leading `#` matches **tags only**, so `#gym` doesn't also match
-  someone whose relationship reads "climbing gym".
 
 ### Changed
 
@@ -221,6 +235,15 @@ All notable changes to Personal CRM. Versions follow
 - `selected()` checked membership with `Array.includes` inside a loop over the
   selection, which is quadratic in it. Measured at 3,000 selected: 4.2 ms → 0.2 ms,
   and it runs on every selection change.
+
+### Internal
+
+- The test suites live in the repo now, at `tests/`: 25 suites and ~520 assertions that
+  bundle the real source and drive it against a fake vault. `npm test` runs them, and CI
+  runs `npm test` on every push and pull request — previously nothing behavioural ran in
+  CI at all.
+- `AGENTS.md` documents the architecture, the invariants, and the Obsidian platform traps
+  that have already cost time.
 
 ## 1.5.0 — 2026-08-17
 
