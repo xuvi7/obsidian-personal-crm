@@ -228,13 +228,34 @@ async function bootView() {
       assert.ok(/safe-area-inset-bottom/.test(body), "safe area dropped: " + body);
     });
 
-    check("the phone header row wraps rather than forcing the pane wider", () => {
-      // Seven 44px buttons want ~332px; a 320px phone has to wrap. `nowrap` here is
-      // what pushed the row past the pane and made the view scroll.
+    check("the phone header stays on one line by compressing, not wrapping", () => {
+      // Seven buttons at 44px want ~332px of pane. Wrapping is the wrong fallback: a
+      // flex line wraps *before* it shrinks, so allowing it put a second 44px row on
+      // screen the moment the widest phone ran out of room. The row is nowrap and the
+      // borderless buttons are shrinkable instead, which needs min-width < width or
+      // there is no room to give.
       const i = CSS.indexOf("body.is-phone .prm-header-buttons {");
       assert.ok(i !== -1);
+      const row = CSS.slice(CSS.indexOf("{", i), CSS.indexOf("}", i));
+      assert.ok(/flex-wrap:\s*nowrap/.test(row), "row can wrap: " + row);
+
+      const j = CSS.indexOf("body.is-phone .prm-view .prm-header-buttons button.clickable-icon {");
+      assert.ok(j !== -1, "the borderless-button rule is gone");
+      const icon = CSS.slice(CSS.indexOf("{", j), CSS.indexOf("}", j));
+      const width = /(?:^|[^-])width:\s*(\d+)px/.exec(icon);
+      const floor = /min-width:\s*(\d+)px/.exec(icon);
+      assert.ok(width && floor, "width/min-width not both px: " + icon);
+      assert.ok(Number(floor[1]) < Number(width[1]),
+        `min-width ${floor[1]}px leaves no room to compress from ${width[1]}px`);
+      assert.ok(/flex:\s*0\s+1\s/.test(icon), "not allowed to shrink: " + icon);
+    });
+
+    check("the filled buttons keep full size and never compress", () => {
+      // They are the primary actions; only the borderless glyphs give ground.
+      const i = CSS.indexOf("body.is-phone .prm-view .prm-header-buttons button:not(.clickable-icon) {\n\tflex:");
+      assert.ok(i !== -1, "the no-shrink rule for filled buttons is gone");
       const body = CSS.slice(CSS.indexOf("{", i), CSS.indexOf("}", i));
-      assert.ok(/flex-wrap:\s*wrap/.test(body), "still nowrap: " + body);
+      assert.ok(/flex:\s*0\s+0\s/.test(body), "filled buttons can shrink: " + body);
     });
 
     check("the list padding covers the checkbox's hit overlay", () => {

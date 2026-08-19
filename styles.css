@@ -1664,12 +1664,50 @@ body.is-phone .prm-title-row {
  * aria-label, so nothing becomes unreachable or unnamed.
  */
 body.is-phone .prm-header-buttons {
-	gap: 0.25rem;
+	/* No container gap: the spacing is applied per button below, so the four borderless
+	   ones can sit flush while the three with a filled background keep theirs. */
+	gap: 0;
 	width: 100%;
-	/* Seven 44px buttons need ~332px, which a 320px phone does not have. Wrapping to a
-	   second row costs 44px; forcing the width made the entire view scroll sideways. */
-	flex-wrap: wrap;
+	/*
+	 * One line, always. Wrapping is not the fallback here because a flex line wraps
+	 * *before* it shrinks, so allowing it meant a second 44px row appeared the moment
+	 * the widest phone ran out of room. Instead the borderless buttons below are
+	 * allowed to compress, which degrades smoothly instead of jumping a whole row.
+	 */
+	flex-wrap: nowrap;
 	justify-content: flex-start;
+}
+
+/*
+ * Obsidian gives `button:not(.clickable-icon)` a background and a shadow, so those three
+ * read as discrete controls and need air between them. A `.clickable-icon` has neither:
+ * it is just a glyph, so a run of them reads as one toolbar group and gaps only waste
+ * width — which is the width that decides whether the row fits on one line.
+ */
+body.is-phone .prm-view .prm-header-buttons button:not(.clickable-icon) {
+	margin-inline-end: 4px;
+}
+
+/*
+ * The three filled buttons are the primary actions and never shrink.
+ */
+body.is-phone .prm-view .prm-header-buttons button:not(.clickable-icon) {
+	flex: 0 0 auto;
+}
+
+/*
+ * 40px rather than 44px, flush, and compressible down to 28px. Seven buttons at 44px with
+ * gaps want ~332px of pane and wrapped on anything under ~360px. These keep the full 44px
+ * of *height*, and being adjacent means a near-miss lands on a neighbouring control
+ * rather than on nothing — dead gaps between small targets are what the 44px guidance
+ * exists to prevent. Shrinking only begins when the pane cannot fit 40px each, so a
+ * normal phone sees 40 and a 300px pane sees ~34 rather than a second row.
+ */
+body.is-phone .prm-view .prm-header-buttons button.clickable-icon {
+	flex: 0 1 auto;
+	width: 40px;
+	min-width: 28px;
+	padding-inline: 0;
 }
 
 body.is-phone .prm-btn-label {

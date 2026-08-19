@@ -39,8 +39,15 @@ All notable changes to Personal CRM. Versions follow
   itself — 12px of side padding and `overflow: auto` — with a selector that outranks
   anything a plugin sets with one class, so the pane was 24px narrower than it looked and
   the overflow that caused scrolled rather than showing. The plugin now wins that contest
-  for its own overflow, reclaims those 24px on phones, and lets the header's icon row wrap
-  instead of forcing the pane wider. Checked at every pane width from 320px to 430px.
+  for its own overflow and reclaims those 24px on phones. Checked at every pane width from
+  280px to 430px.
+- **The header's seven buttons stay on one line at any phone width.** The four borderless
+  ones — calendar, undo, redo, rebuild — now sit flush instead of gapped, and compress from
+  40px toward 28px when the pane is narrow, while the three filled buttons keep full size.
+  They keep the full 44px of height throughout, and being adjacent means a near-miss lands
+  on a neighbouring control rather than on nothing. Wrapping would have been the wrong
+  fallback: a flex row wraps *before* it shrinks, so a second 44px row appeared the moment
+  the pane got tight.
 - The last row could sit under the home indicator on a notched phone; the safe-area inset
   is honoured again.
 - The narrow-pane toolbar set `flex-direction: column` while still inheriting

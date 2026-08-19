@@ -299,7 +299,12 @@ an 804px pane and leaving room for one and a half people:
 - header button labels go, leaving an icon-only row. This is why `renderHeader` wraps every
   label in `.prm-btn-label` and gives every button an `aria-label` **and** an icon. Adding a
   header button without all three leaves an unnamed blank square on a phone; `test-mobile`
-  fails if you do;
+  fails if you do. Seven buttons still do not fit at 44px each, so the four `.clickable-icon`
+  ones sit flush and shrink from 40px toward a 28px floor while the three filled ones hold
+  full size. **Do not make that row `flex-wrap: wrap`** — a flex line wraps before it
+  shrinks, so wrapping puts a whole second 44px row on screen as soon as the pane tightens,
+  which is worse than a slightly narrower glyph. Height stays 44px regardless, and adjacent
+  targets mean a near-miss hits a neighbour rather than nothing;
 - the filter tabs and the stats strip become one horizontally-scrolling row each;
 - **the per-row icon buttons go.** At 21×28 they were unusable and at 44px they cost a line
   per row, and every one of them is in the panel a row-tap opens — the fast path on touch.
