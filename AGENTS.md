@@ -230,7 +230,7 @@ sanctioned APIs are `setCssProps` (custom properties) and `setCssStyles`.
 ### Tests
 
 ```bash
-npm test                          # typecheck + lint + all 24 suites
+npm test                          # typecheck + lint + all 25 suites
 npm run test:only                 # just the suites (skips typecheck/lint)
 node tests/test-drift.cjs         # one suite, directly
 ```
@@ -243,7 +243,7 @@ that output when a suite actually fails.
 
 Each suite is a standalone Node script with its own tiny `check()` helper. They bundle the
 **real** source with esbuild and drive it against a fake vault (`tests/stub-obsidian.cjs`)
-that stores real text and computes a realistic metadata cache. ~500 assertions across 24
+that stores real text and computes a realistic metadata cache. ~520 assertions across 25
 files.
 
 Shared helpers live in `tests/build.cjs`:
@@ -389,13 +389,6 @@ Don't "fix" these without discussion — each was a decision.
   yearly scales would be lost), click-to-see-who needs our own handlers, and Obsidian
   cannot express a plugin dependency. Its *palette* idea was worth borrowing.
 - **Known, deliberately not fixed** (from the five-agent review; each has a reason):
-  - `locateTask` prefers the recorded byte offset over the recorded line, so an edit
-    above a task can make it tick off a *different* task. A text fingerprint on the ref
-    is the fix; it needs a `LoopRef` schema change and a migration.
-  - Markdown-style links (`[Bob](People/Bob.md)`, i.e. wikilinks off) and `[[Bob.md]]`
-    are not attributed — the link map registers paths without the extension and a miss
-    is final. Cheap fix available: also register the path as written, or fall back to
-    `getFirstLinkpathDest` on a miss.
   - Derived status is a snapshot of `today`; nothing re-runs at midnight, so a vault
     left open overnight shows yesterday's queue until the next note edit.
   - An ambiguous person name where Obsidian resolves to a *non-person* note discards
@@ -406,6 +399,18 @@ Don't "fix" these without discussion — each was a decision.
   - `skipped` in the import result mixes notes and fields, so one contact with four
     stale fields reports "4 skipped".
 
+- **A follow-up write requires the task's text, not just its position.** `locateTask`
+  takes an optional `expect`; every caller that writes must pass what the UI displayed.
+  Positions alone cannot tell two tasks apart, and in a list of tasks a shifted offset
+  lands on another one. Fixed in 1.6.0 without the `LoopRef` schema change that a stored
+  fingerprint would have needed — the text comes from the in-memory `Loop` instead.
+- **Link resolution is a map lookup first, Obsidian second.** `resolvePersonLink` is the
+  single seam; `buildPersonLinkMap` registers names, aliases, and paths both with and
+  without `.md`. Real resolution is reserved for names two people share and for the
+  relative or extension-bearing targets the map cannot express (`needsRealResolution`),
+  because a miss is usually a link to a non-person and resolving every one would add a
+  call per link per dated note. Anything real resolution returns is vetted against
+  `byPath` before it counts.
 - **`MOC` is in the default person-name exclusions**, which also excludes a person
   legitimately named e.g. "Moc". Matching is whole-word to limit the damage.
 - **The `history/pre-conventional` branch** preserves pre-rewrite commit history.
