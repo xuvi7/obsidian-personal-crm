@@ -220,6 +220,29 @@ body and keys **288** of its own rules off `.is-phone`. It never uses `pointer: 
 anywhere. Follow the host: take its word for the device rather than inferring one, so a
 laptop with a touchscreen does not get phone layout.
 
+**`is-phone` vs `is-tablet` is decided by window size, not by hardware.** From the app's
+own source:
+
+```js
+i = window.matchMedia("(min-width: 600px) and (min-height: 600px)");
+Yl.isTablet = i.matches;  Yl.isPhone = !i.matches;
+document.body.toggleClass("is-tablet", Yl.isTablet);
+document.body.toggleClass("is-phone", Yl.isPhone);
+```
+
+It re-evaluates on every resize, and the whole block only runs when `isMobile` — desktop
+never gets either class. Consequences for testing:
+
+- **`Cmd+P` → "Emulate mobile"** (or `app.emulateMobile(true)` in the console; it sets a
+  localStorage flag and reloads) puts the real classes on the real app with the real vault.
+  This is a better test than any harness.
+- In a normal-sized window that gives you **`is-mobile is-tablet`** — tap targets but no
+  phone compaction. **Shrink the window under 600px** in either dimension to get
+  `is-phone`. Testing the phone layout in a large emulated window shows almost nothing and
+  reads as "the mobile work did nothing".
+- A phone in landscape is still a phone: 844×390 fails `min-height: 600px`. An iPad in
+  portrait is a tablet. That matches what the two classes are used for here.
+
 The mobile section of `styles.css` defines four tokens under `body.is-mobile` and nothing
 anywhere else:
 
