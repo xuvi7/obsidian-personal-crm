@@ -1,10 +1,12 @@
 /** The release-notes extractor: gets the right section, and refuses bad input. */
 const { execFileSync } = require("child_process");
 const assert = require("assert");
-const path = require("path");
-const REPO = path.join(process.env.HOME, "Repos/obsidian-personal-crm");
-const run = (v) => execFileSync("node", ["scripts/changelog-section.mjs", v],
-  { cwd: REPO, encoding: "utf8" });
+const harness = require("./build.cjs");
+// process.execPath, not "node": the script under test is spawned with an explicit
+// cwd, and a bare "node" plus a wrong cwd is what made this the one suite that
+// failed in CI while passing locally.
+const run = (v) => execFileSync(process.execPath, ["scripts/changelog-section.mjs", v],
+  { cwd: harness.repoRoot, encoding: "utf8" });
 const fails = (v) => { try { run(v); return false; } catch { return true; } };
 
 let passed = 0, failed = 0;
