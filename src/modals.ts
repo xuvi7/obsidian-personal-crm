@@ -1212,7 +1212,9 @@ export class PersonActionsModal extends Modal {
 				const wanted = box.checked;
 				box.disabled = true;
 				void this.plugin
-					.completeLoop(loop.ref, wanted)
+					// loop.text is what this row is showing, so it is exactly the text
+					// the write must still find at the ref.
+					.completeLoop(loop.ref, wanted, loop.text)
 					.then((ok) => {
 						if (!ok) {
 							box.checked = !wanted;

@@ -69,21 +69,36 @@ function lineSpanOfLine(content: string, line: number): [number, number] | null 
 /**
  * Find the open task a ref points at.
  *
- * Prefers the recorded offset, then the recorded line: an edit elsewhere in the
- * file shifts offsets while leaving line numbers alone, and vice versa. If
- * neither still holds an open task the ref is stale and nothing is returned,
- * rather than guessing at a line and rewriting the wrong one.
+ * Tries the recorded offset, then the recorded line: an edit elsewhere in the file
+ * shifts offsets while leaving line numbers alone, and vice versa. If neither still
+ * holds an open task the ref is stale and nothing is returned, rather than guessing
+ * at a line and rewriting the wrong one.
+ *
+ * `expect` is the task text the caller last showed the user. Pass it whenever the
+ * result will be *written*, because the positional checks alone cannot tell one task
+ * from another: inserting a line above a to-do list shifts every offset down, each
+ * one lands on a neighbouring line that is also a task, the pattern matches, and the
+ * wrong follow-up gets ticked off. Requiring the words to agree closes that, and a
+ * ref whose text has changed is treated as stale — which the caller already handles
+ * by reindexing and telling the user.
  */
 export function locateTask(
 	content: string,
 	ref: LoopRef,
 	pattern: RegExp = OPEN_TASK,
+	expect?: string,
 ): [number, number] | null {
+	const accepts = (span: [number, number]): boolean => {
+		const line = content.slice(span[0], span[1]);
+		if (!pattern.test(line)) return false;
+		return expect === undefined || parseTask(line).text === expect;
+	};
+
 	const byOffset = lineSpanAt(content, ref.offset);
-	if (pattern.test(content.slice(byOffset[0], byOffset[1]))) return byOffset;
+	if (accepts(byOffset)) return byOffset;
 
 	const byLine = lineSpanOfLine(content, ref.line);
-	if (byLine && pattern.test(content.slice(byLine[0], byLine[1]))) return byLine;
+	if (byLine && accepts(byLine)) return byLine;
 
 	return null;
 }
@@ -182,12 +197,20 @@ export async function readLoops(app: App, refs: LoopRef[]): Promise<Loop[]> {
 /**
  * Set the task a ref points at to done or open, or null when the ref is stale.
  *
+ * `expect` is the text the user was shown; see `locateTask`. Always pass it from the
+ * UI, so that ticking a box cannot land on a task that merely moved into place.
+ *
  * Both directions, because ticking a follow-up off by accident has to be
  * undoable in the place you did it — the index drops a completed task, so the
  * checkbox is the only handle left on it.
  */
-export function setTask(content: string, ref: LoopRef, done: boolean): string | null {
-	const span = locateTask(content, ref, ANY_TASK);
+export function setTask(
+	content: string,
+	ref: LoopRef,
+	done: boolean,
+	expect?: string,
+): string | null {
+	const span = locateTask(content, ref, ANY_TASK, expect);
 	if (!span) return null;
 	const line = content.slice(span[0], span[1]);
 	const next = line.replace(ANY_TASK, done ? "$1x$3" : "$1 $3");

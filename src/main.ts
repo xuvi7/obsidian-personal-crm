@@ -953,8 +953,11 @@ export default class PrmPlugin extends Plugin {
 	 * The ref carries an offset and a line, both of which an edit can invalidate.
 	 * If neither still points at an open task the write is declined rather than
 	 * ticking off whatever moved into its place.
+	 *
+	 * `expect` is the task text the UI displayed. Positions alone cannot tell two
+	 * tasks apart, so callers that have it must pass it; see `locateTask`.
 	 */
-	async completeLoop(ref: LoopRef, done = true): Promise<boolean> {
+	async completeLoop(ref: LoopRef, done = true, expect?: string): Promise<boolean> {
 		const file = this.app.vault.getAbstractFileByPath(ref.path);
 		if (!(file instanceof TFile)) {
 			new Notice(`${ref.path} is gone.`);
@@ -968,7 +971,7 @@ export default class PrmPlugin extends Plugin {
 		const entry = await this.tracked(file, label, async () => {
 			try {
 				await this.app.vault.process(file, (content) => {
-					const next = setTask(content, ref, done);
+					const next = setTask(content, ref, done, expect);
 					if (next === null) return content;
 					wrote = true;
 					return next;

@@ -244,6 +244,60 @@ async function boot(build, settings = {}) {
       assert.strictEqual(plugin.engine.diagnostics().openLoopsFound, 0));
   }
 
+  console.log("\nA ref only ticks the task it was made for");
+  {
+    // Three tasks in a row, then a line inserted above them: every recorded offset
+    // now lands on the task *before* the one it was made for, and that line is also
+    // an open task, so the positional checks alone are satisfied by the wrong one.
+    const before = "---\ntags:\n  - people\n---\n" +
+      "- [ ] call the plumber\n- [ ] book the dentist\n- [ ] renew the passport\n";
+    const after = before.replace("---\n- [ ]", "---\nA note I added.\n- [ ]");
+    const refFor = (content, text) => {
+      const idx = content.indexOf(`- [ ] ${text}`);
+      return { path: "People/Sam.md", own: true, offset: idx,
+        line: content.slice(0, idx).split("\n").length - 1 };
+    };
+    const ref = refFor(before, "book the dentist");
+
+    check("the hazard is real: positions alone hit the wrong task", () => {
+      const span = L.locateTask(after, ref, /^\s*[-*+]\s*\[( )\]/);
+      assert.ok(span, "expected a positional match");
+      assert.strictEqual(after.slice(span[0], span[1]), "- [ ] call the plumber");
+    });
+    check("the expected text refuses that match", () =>
+      assert.strictEqual(L.locateTask(after, ref, /^\s*[-*+]\s*\[( )\]/,
+        "book the dentist"), null));
+    check("so setTask declines rather than ticking the neighbour", () =>
+      assert.strictEqual(L.setTask(after, ref, true, "book the dentist"), null));
+    check("and without the guard it would have written the wrong line", () => {
+      const wrong = L.setTask(after, ref, true);
+      assert.ok(wrong.includes("- [x] call the plumber"), wrong);
+    });
+    check("an unmoved task still ticks, with the text agreeing", () => {
+      const out = L.setTask(before, ref, true, "book the dentist");
+      assert.ok(out.includes("- [x] book the dentist"), out);
+      assert.ok(out.includes("- [ ] call the plumber"), out);
+    });
+    check("reopening is guarded the same way", () => {
+      const done = before.replace("- [ ] book", "- [x] book");
+      assert.strictEqual(L.setTask(done, refFor(done, "call the plumber"), false,
+        "book the dentist"), null);
+      const out = L.setTask(done, ref, false, "book the dentist");
+      assert.ok(out.includes("- [ ] book the dentist"), out);
+    });
+    check("a due date is stripped from both sides before comparing", () => {
+      const dated = before.replace("- [ ] book the dentist",
+        "- [ ] book the dentist \uD83D\uDCC5 2026-09-01");
+      const out = L.setTask(dated, refFor(dated, "book the dentist"), true,
+        "book the dentist");
+      assert.ok(out.includes("- [x] book the dentist"), out);
+    });
+    check("omitting the text keeps the old positional behaviour", () => {
+      const out = L.setTask(before, ref, true);
+      assert.ok(out.includes("- [x] book the dentist"), out);
+    });
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
 })();
