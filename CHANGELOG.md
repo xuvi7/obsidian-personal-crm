@@ -177,6 +177,16 @@ All notable changes to Personal CRM. Versions follow
 
 ### Performance
 
+- **The dashboard list is windowed.** One viewport of rows is built up front and more
+  are appended as the reader scrolls, so the DOM is proportional to scroll depth rather
+  than to vault size. Filtering and sorting moved from hiding built rows to filtering
+  the data, so a search still reaches someone 3,000 rows down, "Select all" still means
+  every match rather than every rendered row, and a shift-range still spans rows that
+  don't exist yet. On a 3,000-person list: **2.8 ms first paint against 120 ms**, and
+  ~1,400 DOM nodes against ~108,000.
+- Search keys are normalized once per record and cached until the index changes, and the
+  search input is debounced by 70 ms. Typing a nine-character query went from 83.7 ms of
+  work to 2.8 ms.
 - Row icons are built once per icon name and cloned thereafter. Three icon buttons per
   row means `setIcon()` ran once per button — 9,000 times on a 3,000-person list — and
   building a Lucide SVG costs measurably more than cloning one: 49.8 ms against 33.3 ms

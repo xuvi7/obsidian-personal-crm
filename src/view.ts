@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Notice, TFile, WorkspaceLeaf, debounce, setIcon } from "obsidian";
 import type PrmPlugin from "./main";
 import { tierById } from "./settings";
 import type { PersonRecord, PersonStatus } from "./types";
@@ -75,6 +75,24 @@ function appendIcon(el: HTMLElement, name: string): void {
 	el.appendChild(template.cloneNode(true));
 }
 
+/**
+ * Rows built on first paint. Roughly two screens at a typical row height; the
+ * sentinel's 400px margin fills a taller pane immediately, so this doesn't need to
+ * be generous — and every row it builds is paid for again on each keystroke.
+ */
+const FIRST_CHUNK = 40;
+/** Rows added each time the sentinel comes into view. */
+const CHUNK = 40;
+/**
+ * How long to wait after the last keystroke before rebuilding the list.
+ *
+ * Filtering is cheap (0.3 ms over 3,000 records); replacing and painting the rows is
+ * not (~7 ms). Coalescing by frame wouldn't help — typing is slower than a frame —
+ * so this collapses a burst of keystrokes into one render, below the ~100 ms at which
+ * a delay becomes noticeable.
+ */
+const SEARCH_DEBOUNCE_MS = 70;
+
 export class PrmDashboardView extends ItemView {
 	private filter: FilterKey = "due";
 	private sort: SortKey = "urgency";
@@ -94,6 +112,19 @@ export class PrmDashboardView extends ItemView {
 	private lastClicked: string | null = null;
 	/** The order rows are currently in, for resolving a shift-click range. */
 	private rowOrder: string[] = [];
+	/**
+	 * The filtered, sorted list the DOM is a prefix of, and how much of it is built.
+	 *
+	 * Rows are appended a chunk at a time as the sentinel scrolls into view, so the
+	 * DOM is proportional to how far you've scrolled rather than to the vault. A
+	 * 3,000-person list built every row up front: ~108,000 elements and ~120 ms.
+	 */
+	private windowRecords: PersonRecord[] = [];
+	private built = 0;
+	private sentinel: HTMLElement | null = null;
+	private observer: IntersectionObserver | null = null;
+	/** Search keys per record path, rebuilt when the index changes. */
+	private searchKeys = new Map<string, { all: string; tags: string; place: string }>();
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -132,7 +163,13 @@ export class PrmDashboardView extends ItemView {
 		// One coalesced handler: the engine and the undo stack both fire on a single
 		// write, and rebuilding the whole list twice per click was the dominant cost.
 		const invalidate = () => this.scheduleRender();
-		this.register(this.plugin.engine.onChange(invalidate));
+		this.register(
+			this.plugin.engine.onChange(() => {
+				// Records are rebuilt, so their cached search keys are stale.
+				this.searchKeys.clear();
+				invalidate();
+			}),
+		);
 		this.register(this.plugin.undo.onChange(invalidate));
 
 		this.renderAll();
@@ -141,6 +178,7 @@ export class PrmDashboardView extends ItemView {
 	onClose(): Promise<void> {
 		if (this.frame !== null) window.cancelAnimationFrame(this.frame);
 		this.frame = null;
+		this.teardownObserver();
 		return Promise.resolve();
 	}
 
@@ -396,11 +434,20 @@ export class PrmDashboardView extends ItemView {
 			attr: { type: "search", placeholder: "Name, #tag or @place…" },
 		});
 		search.value = this.query;
-		// Filtering hides already-built rows rather than rebuilding them, so typing
-		// stays instant instead of costing a full render per keystroke.
+		// A keystroke rebuilds the list — only one viewport of it, but that's still a
+		// paint — so bursts are debounced. A chip click goes through setQuery() and
+		// renders at once, since there's no burst to collapse there.
+		const rerun = debounce(
+			() => {
+				this.renderList();
+				this.renderBulkBar();
+			},
+			SEARCH_DEBOUNCE_MS,
+			true,
+		);
 		search.oninput = () => {
 			this.query = search.value;
-			this.applyQuery();
+			rerun();
 		};
 		this.searchEl = search;
 
@@ -417,18 +464,75 @@ export class PrmDashboardView extends ItemView {
 
 	private renderList(): void {
 		const list = this.listEl;
+		this.teardownObserver();
 		list.empty();
+		this.built = 0;
 
-		const records = this.selectedRecords();
+		const records = this.matchingRecords();
+		this.windowRecords = records;
+		// The full filtered order, not just what's built: a shift-range has to be
+		// able to span rows that haven't been rendered yet.
 		this.rowOrder = records.map((r) => r.path);
+
 		if (records.length === 0) {
-			this.renderEmptyState(list);
+			if (this.query.trim().length > 0) {
+				list.createDiv({
+					cls: "prm-empty prm-no-matches",
+					text: `Nobody matches "${this.query}".`,
+				});
+			} else {
+				this.renderEmptyState(list);
+			}
 			return;
 		}
 
+		this.appendChunk(FIRST_CHUNK);
+		this.watchForMore();
+	}
+
+	/** Build the next `count` rows of the current window. */
+	private appendChunk(count: number): void {
 		const today = todayISO();
-		for (const record of records) this.renderRow(list, record, today);
-		this.applyQuery();
+		const end = Math.min(this.built + count, this.windowRecords.length);
+		for (let i = this.built; i < end; i++) {
+			this.renderRow(this.listEl, this.windowRecords[i], today);
+		}
+		this.built = end;
+
+		// Keep the sentinel last so it stays below the rows it guards.
+		if (this.built < this.windowRecords.length) {
+			if (!this.sentinel) this.sentinel = this.listEl.createDiv({ cls: "prm-list-sentinel" });
+			else this.listEl.appendChild(this.sentinel);
+		} else {
+			this.sentinel?.remove();
+			this.sentinel = null;
+			this.teardownObserver();
+		}
+	}
+
+	/**
+	 * Append more rows when the sentinel comes into view.
+	 *
+	 * Rooted on the scroll container and given a generous margin, so the next chunk
+	 * is built before the reader reaches it. Each append moves the sentinel down,
+	 * which re-triggers the observer — so a fast scroll fills in without extra
+	 * bookkeeping.
+	 */
+	private watchForMore(): void {
+		if (!this.sentinel) return;
+		this.observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((e) => e.isIntersecting)) this.appendChunk(CHUNK);
+			},
+			{ root: this.listEl, rootMargin: "400px 0px" },
+		);
+		this.observer.observe(this.sentinel);
+	}
+
+	private teardownObserver(): void {
+		this.observer?.disconnect();
+		this.observer = null;
+		this.sentinel = null;
 	}
 
 	/** Show everyone in one place, from the "Who's in…" command. */
@@ -447,39 +551,55 @@ export class PrmDashboardView extends ItemView {
 	setQuery(query: string): void {
 		this.query = query;
 		if (this.searchEl) this.searchEl.value = query;
-		this.applyQuery();
+		this.renderList();
+		this.renderBulkBar();
 	}
 
-	/** Show/hide built rows to match the search box. */
-	private applyQuery(): void {
+	/**
+	 * The records the current tab, sort and search select, in display order.
+	 *
+	 * The search runs over the data rather than over built rows. Hiding rows with a
+	 * class was cheap, but it required every row to exist — which is the cost
+	 * windowing is here to avoid.
+	 */
+	private matchingRecords(): PersonRecord[] {
+		const records = this.selectedRecords();
+		const q = normalizeName(this.query);
+		if (q.length === 0) return records;
+
 		// A leading '#' or '@' scopes the search to tags or places: clicking the
 		// #gym chip shouldn't also match someone whose relationship reads "climbing
 		// gym". Plain text still searches all of it together.
 		const trimmed = this.query.trimStart();
-		const field = trimmed.startsWith("#")
-			? "prmTags"
-			: trimmed.startsWith("@")
-				? "prmPlace"
-				: "prmSearch";
-		const q = normalizeName(this.query);
-		let visible = 0;
-		for (const child of Array.from(this.listEl.children)) {
-			const el = child as HTMLElement;
-			const haystack = el.dataset[field];
-			if (haystack === undefined) continue;
-			const show = q.length === 0 || haystack.includes(q);
-			el.toggleClass("prm-hidden", !show);
-			if (show) visible++;
-		}
+		const field = trimmed.startsWith("#") ? "tags" : trimmed.startsWith("@") ? "place" : "all";
+		return records.filter((r) => this.keysFor(r)[field].includes(q));
+	}
 
-		const existing = this.listEl.querySelector(".prm-no-matches");
-		if (existing) existing.remove();
-		if (visible === 0 && q.length > 0) {
-			this.listEl.createDiv({
-				cls: "prm-empty prm-no-matches",
-				text: `Nobody matches "${this.query}".`,
-			});
-		}
+	/**
+	 * Normalized search keys for a record, memoized.
+	 *
+	 * normalizeName does a Unicode decomposition and two regex passes; doing that for
+	 * every record on every keystroke is the one part of searching that isn't free.
+	 * The cache is cleared whenever the index changes.
+	 */
+	private keysFor(record: PersonRecord): { all: string; tags: string; place: string } {
+		const found = this.searchKeys.get(record.path);
+		if (found) return found;
+		const keys = {
+			all: normalizeName(
+				[
+					record.name,
+					...record.aliases,
+					record.relationship ?? "",
+					record.location ?? "",
+					...record.tags,
+				].join(" "),
+			),
+			tags: normalizeName(record.tags.join(" ")),
+			place: normalizeName(record.location ?? ""),
+		};
+		this.searchKeys.set(record.path, keys);
+		return keys;
 	}
 
 	private renderEmptyState(list: HTMLElement): void {
@@ -835,14 +955,14 @@ export class PrmDashboardView extends ItemView {
 	// ------------------------------------------------------------------ selection
 
 	/** Paths of rows the search box hasn't hidden. */
+	/**
+	 * Every path the current filter and search select — including rows not yet built.
+	 *
+	 * Reading this from the DOM would have made "Select all" mean "select what has
+	 * been scrolled past", which is not what the button says.
+	 */
 	private visiblePaths(): string[] {
-		const out: string[] = [];
-		for (const child of Array.from(this.listEl.children)) {
-			const el = child as HTMLElement;
-			const path = el.dataset.prmPath;
-			if (path !== undefined && !el.hasClass("prm-hidden")) out.push(path);
-		}
-		return out;
+		return this.rowOrder.slice();
 	}
 
 	private selectedRecords(): PersonRecord[] {

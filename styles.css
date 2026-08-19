@@ -167,6 +167,12 @@
 	padding: 0 1rem 2rem;
 }
 
+/* The tripwire that pulls in the next chunk of rows. It must have height, or an
+   IntersectionObserver can never see it. */
+.prm-list-sentinel {
+	height: 1px;
+}
+
 .prm-row {
 	content-visibility: auto;
 	contain-intrinsic-size: auto 44px;
@@ -1091,10 +1097,6 @@ a.prm-place:hover {
 /* ------------------------------------------------ new-in-1.1 UI affordances */
 
 /* Search hides built rows rather than rebuilding the list, so typing is instant. */
-.prm-hidden {
-	display: none;
-}
-
 .prm-chip-button {
 	background: transparent;
 	box-shadow: none;
@@ -1187,7 +1189,7 @@ a.prm-place:hover {
 		padding: 0 0.5rem 2rem;
 	}
 
-	.prm-row {
+.prm-row {
 		flex-direction: column;
 		align-items: stretch;
 		gap: 0.35rem;
