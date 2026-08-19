@@ -1286,6 +1286,14 @@ a.prm-place:hover {
 	.prm-toolbar {
 		align-items: stretch;
 		flex-direction: column;
+		/*
+		 * The wide layout sets `flex-wrap: wrap`, and wrap in a *column* container makes
+		 * items form extra columns rather than extra rows: the toolbar grew sideways, so
+		 * `.prm-controls` was laid out at its 483px max-content width inside a 331px pane
+		 * and the sort dropdown sat 143px past the edge — unreachable behind
+		 * `.prm-view { overflow: hidden }`. Any pane under 700px had this, not just phones.
+		 */
+		flex-wrap: nowrap;
 	}
 
 	.prm-reachout-modal {
@@ -1465,4 +1473,325 @@ a.prm-place:hover {
 	.prm-bulk-clear {
 		margin-left: 0;
 	}
+}
+
+/* ============================================================== mobile / touch */
+/*
+ * Obsidian puts `.is-mobile`, `.is-phone`, `.is-tablet` (and `.is-ios`/`.is-android`)
+ * on the body, and keys 288 of its own rules off `.is-phone`. This section does the
+ * same rather than testing `pointer: coarse` — which Obsidian never uses — so the
+ * plugin takes the host's word for what device it is. A laptop with a touchscreen is
+ * not a phone, and should not get phone layout.
+ *
+ * Everything below reads a token that is only defined under `.is-mobile`, so each
+ * rule falls back to its desktop value and the desktop layout is untouched:
+ *
+ *   min-height: var(--prm-tap, auto)
+ *
+ * The selectors carry `body.is-mobile`, which also settles the specificity contest
+ * against Obsidian's `button:not(.clickable-icon)` (0,1,1) described in §4.1 of
+ * AGENTS.md — a single plugin class loses that one, `body.is-mobile .prm-tab` (0,2,1)
+ * does not.
+ */
+
+body.is-mobile {
+	/* 44px is the platform minimum tap target on both iOS and Android. */
+	--prm-tap: 44px;
+	/* Padding on an inline element grows its hit box without moving the line box,
+	   so a 14px-tall link becomes tappable without changing the layout. */
+	--prm-link-pad: 8px;
+	/* Below 16px, iOS zooms the whole pane when a field takes focus, and the user
+	   has to pinch back out after every note they type. */
+	--prm-field-font: 16px;
+	--prm-cell-size: 22px;
+}
+
+/* ---------------------------------------------------------------- tap targets */
+
+body.is-mobile .prm-icon-btn,
+body.is-mobile .prm-tabs .prm-tab,
+body.is-mobile .prm-cal-controls .prm-tab,
+body.is-mobile .prm-view .prm-header-buttons button,
+body.is-mobile .prm-view .prm-controls button,
+body.is-mobile .prm-bulkbar button {
+	min-height: var(--prm-tap);
+	min-width: var(--prm-tap);
+}
+
+/* Text buttons only need the height; forcing 44px of width on "Due" would push the
+   tab row off the pane. */
+body.is-mobile .prm-tabs .prm-tab,
+body.is-mobile .prm-cal-controls .prm-tab,
+body.is-mobile .prm-view .prm-header-buttons button:not(.clickable-icon),
+body.is-mobile .prm-bulkbar button {
+	min-width: 0;
+	padding-inline: 0.7rem;
+}
+
+/* Inline links, in the views and in the dialogs alike. */
+body.is-mobile .prm-name,
+body.is-mobile .prm-tag,
+body.is-mobile .prm-place,
+body.is-mobile .prm-meta-link,
+body.is-mobile .prm-cal-person,
+body.is-mobile .prm-loop-source {
+	padding-block: var(--prm-link-pad);
+}
+
+/*
+ * The dialogs carry more weight on a phone than on a desktop: with the per-row icon
+ * buttons gone, the panel a row-tap opens is the only way to log, snooze, set a
+ * cadence or add a tag, and every one of those buttons was 27.5px tall.
+ */
+body.is-mobile .prm-action-btn,
+body.is-mobile .prm-panel button,
+body.is-mobile .prm-log-modal button,
+body.is-mobile .prm-reachout-modal button,
+body.is-mobile .prm-import-modal button {
+	min-height: var(--prm-tap);
+}
+
+/* px, not rem: rem follows the root font size, which themes change — at a 14px root
+   a `2rem` minimum silently becomes 28px. Anything sizing a tap target is in px. */
+body.is-mobile .prm-chip-button {
+	min-height: 32px;
+	padding-block: 0.3rem;
+}
+
+/*
+ * The row checkbox was 13x13 — under 3.5mm on a phone. The box itself only grows to
+ * 22px, because a 44px checkbox reads as a button; the rest of the target comes from
+ * a transparent overlay. Pointer events on the pseudo-element hit the input, so the
+ * tappable area is 44px square while the drawn control stays 22px.
+ */
+body.is-mobile .prm-select,
+body.is-mobile .prm-loop-check {
+	width: 22px;
+	height: 22px;
+	position: relative;
+}
+
+body.is-mobile .prm-select::before,
+body.is-mobile .prm-loop-check::before {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: var(--prm-tap);
+	height: var(--prm-tap);
+	transform: translate(-50%, -50%);
+	background: transparent;
+}
+
+/* ----------------------------------------------------------------- text fields */
+
+body.is-mobile .prm-search,
+body.is-mobile .prm-note-input,
+body.is-mobile .prm-date-input,
+body.is-mobile .prm-loop-input,
+body.is-mobile .prm-tier-select,
+body.is-mobile .prm-sort,
+body.is-mobile .prm-view input,
+body.is-mobile .prm-view select,
+body.is-mobile .prm-log-modal input,
+body.is-mobile .prm-log-modal textarea,
+body.is-mobile .prm-panel input,
+body.is-mobile .prm-panel textarea {
+	font-size: var(--prm-field-font);
+}
+
+body.is-mobile .prm-search,
+body.is-mobile .prm-date-input,
+body.is-mobile .prm-loop-input,
+body.is-mobile .prm-sort {
+	min-height: var(--prm-tap);
+}
+
+/* --------------------------------------------------------------- phone chrome */
+/*
+ * On a phone the chrome was taking ~700px of an 804px pane — title, two rows of
+ * header buttons, two rows of stats, two rows of filter tabs, then the toolbar —
+ * leaving room for one and a half people. These rules are what buy the list back.
+ */
+
+/* Obsidian's own view header already names the view on a phone, so the <h2> is a
+   second copy of the same word and a whole line of it. */
+body.is-phone .prm-title {
+	display: none;
+}
+
+body.is-phone .prm-chrome {
+	padding: 0.4rem 0.6rem 0;
+}
+
+body.is-phone .prm-title-row {
+	gap: 0.35rem;
+}
+
+/*
+ * Icon-only on a phone. Seven controls at a 44px minimum need ~330px of a 350px pane
+ * with their labels hidden, and three wrapped rows of chrome with them shown. The
+ * labels are a span the view tags for exactly this, and every button carries an
+ * aria-label, so nothing becomes unreachable or unnamed.
+ */
+body.is-phone .prm-header-buttons {
+	gap: 0.25rem;
+	width: 100%;
+	flex-wrap: nowrap;
+	justify-content: space-between;
+}
+
+body.is-phone .prm-btn-label {
+	display: none;
+}
+
+/*
+ * With the label gone these are icon buttons too, so they want the square minimum
+ * back. The `:not(.clickable-icon)` is not filtering anything here — it is buying
+ * specificity: the `min-width: 0` rule above is (0,3,1) and would otherwise outrank a
+ * (0,2,1) selector no matter which came later.
+ */
+body.is-phone .prm-view .prm-header-buttons button:not(.clickable-icon) {
+	min-width: var(--prm-tap);
+	padding-inline: 0;
+}
+
+body.is-phone .prm-header-buttons .prm-action-icon {
+	margin: 0;
+}
+
+/* The separators were spacing three groups apart; with icons alone the row is short
+   enough that `space-between` does that job. */
+body.is-phone .prm-header-divider {
+	display: none;
+}
+
+/*
+ * The per-row icon buttons go, on phones only. At 21x28 they were unusable, at 44px
+ * they cost a whole line per row, and every one of them is already in the panel that
+ * a tap on the row opens — which is the fast path on a touch device. Tablets and
+ * desktops keep them.
+ */
+body.is-phone .prm-row-actions {
+	display: none;
+}
+
+body.is-phone .prm-stats {
+	gap: 0.75rem;
+	padding: 0.35rem 0 0.1rem;
+	flex-wrap: nowrap;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+body.is-phone .prm-stats::-webkit-scrollbar {
+	display: none;
+}
+
+/* One scrolling row instead of two wrapped ones. */
+body.is-phone .prm-tabs {
+	flex-wrap: nowrap;
+	overflow-x: auto;
+	scrollbar-width: none;
+	/* Room for the tap targets without the scrollbar clipping them. */
+	padding-bottom: 0.15rem;
+}
+
+body.is-phone .prm-tabs::-webkit-scrollbar {
+	display: none;
+}
+
+body.is-phone .prm-tabs .prm-tab {
+	flex: 0 0 auto;
+}
+
+body.is-phone .prm-toolbar {
+	padding: 0.35rem 0 0.45rem;
+	gap: 0.4rem;
+}
+
+/* Sort is the widest control and the least used; let it drop to its own line rather
+   than squeezing the search box. */
+body.is-phone .prm-controls {
+	row-gap: 0.4rem;
+}
+
+body.is-phone .prm-sort {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+/*
+ * `width: 100%` here pushed the sort dropdown off the right edge of the pane, where
+ * `.prm-view { overflow: hidden }` made it unreachable. Let it take the slack instead
+ * and leave the sort control its intrinsic width.
+ */
+body.is-phone .prm-search {
+	min-width: 0;
+	flex: 1 1 6rem;
+}
+
+/* Numbers like "16 due soon" were breaking across two lines and taking a second row
+   of chrome with them; the strip scrolls sideways instead. */
+body.is-phone .prm-stat {
+	white-space: nowrap;
+}
+
+/*
+ * `.prm-row-meta` is a flex row, so these links are flex items — the tap padding grows
+ * their boxes for real rather than just overflowing a line box, and against the default
+ * `align-items: stretch` that left "last 7w ago" sitting lower than its neighbours.
+ */
+body.is-mobile .prm-row-meta,
+body.is-mobile .prm-name-row {
+	align-items: center;
+}
+
+/* ------------------------------------------------------------------ phone rows */
+
+body.is-phone .prm-list {
+	padding: 0 0.6rem 2rem;
+}
+
+body.is-phone .prm-row {
+	padding-block: 0.5rem;
+	gap: 0.25rem;
+}
+
+/* --------------------------------------------------------------- phone calendar */
+
+body.is-mobile .prm-calview .prm-cal-table .prm-cal-cell,
+body.is-mobile .prm-calview .prm-cal-legend .prm-cal-cell {
+	width: var(--prm-cell-size);
+	height: var(--prm-cell-size);
+}
+
+body.is-mobile .prm-cal-collabel {
+	width: var(--prm-cell-size);
+}
+
+/* The scale-specific widths are wider than the day cell, so they need lifting too
+   or a month cell ends up narrower than a day one. */
+body.is-mobile .prm-calview .prm-cal-body[data-prm-scale="year"] .prm-cal-cell {
+	width: 56px;
+	height: 34px;
+}
+
+body.is-mobile .prm-cal-body[data-prm-scale="year"] .prm-cal-collabel {
+	width: 56px;
+}
+
+body.is-mobile .prm-calview .prm-cal-body[data-prm-scale="month"] .prm-cal-cell,
+body.is-mobile .prm-cal-body[data-prm-scale="month"] .prm-cal-collabel {
+	width: 40px;
+}
+
+body.is-mobile .prm-calview .prm-cal-body[data-prm-scale="month"] .prm-cal-cell {
+	height: 32px;
+}
+
+/* Momentum scrolling for the grid, which is wider than any phone. */
+body.is-mobile .prm-cal-body {
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior-x: contain;
 }

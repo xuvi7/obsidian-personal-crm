@@ -253,18 +253,26 @@ export class PrmDashboardView extends ItemView {
 
 		const buttons = titleRow.createDiv({ cls: "prm-header-buttons" });
 
+		// Labels are wrapped in `.prm-btn-label` so a phone can drop them and leave an
+		// icon-only toolbar: seven controls do not fit a 350px pane at a 44px minimum,
+		// and wrapping them cost three rows of chrome. Every one carries an aria-label,
+		// because on a phone the icon is all that is left.
 		const reachOut = buttons.createEl("button", { cls: "prm-primary-btn mod-cta" });
 		setIcon(reachOut.createSpan({ cls: "prm-action-icon" }), "send");
-		reachOut.createSpan({ text: "Reach out" });
+		reachOut.createSpan({ cls: "prm-btn-label", text: "Reach out" });
+		reachOut.setAttribute("aria-label", "Reach out");
 		reachOut.onclick = () => this.plugin.startReachOutSession();
 
 		const add = buttons.createEl("button", { cls: "prm-header-btn" });
 		setIcon(add.createSpan({ cls: "prm-action-icon" }), "user-plus");
-		add.createSpan({ text: "Add person" });
+		add.createSpan({ cls: "prm-btn-label", text: "Add person" });
 		add.setAttribute("aria-label", "Add a person");
 		add.onclick = () => this.plugin.openCreatePerson();
 
-		const triage = buttons.createEl("button", { text: "Triage" });
+		const triage = buttons.createEl("button", { cls: "prm-header-btn" });
+		setIcon(triage.createSpan({ cls: "prm-action-icon" }), "list-checks");
+		triage.createSpan({ cls: "prm-btn-label", text: "Triage" });
+		triage.setAttribute("aria-label", "Triage");
 		triage.onclick = () => this.plugin.startTriage();
 
 		buttons.createDiv({ cls: "prm-header-divider" });
