@@ -715,9 +715,16 @@ export default class PrmPlugin extends Plugin {
 	): Promise<UndoEntry | null> {
 		return this.writes.run(file.path, async () => {
 			const before = await this.app.vault.read(file);
-			await mutate();
-			const after = await this.app.vault.read(file);
-			return this.undo.record(label, [{ path: file.path, before, after }]);
+			try {
+				await mutate();
+			} finally {
+				// Recorded even on failure. A multi-step mutation can throw with part of
+				// it applied, and without this that partial edit had no undo entry at
+				// all. `record` returns null for a no-op, so a clean failure adds nothing.
+				const after = await this.app.vault.read(file);
+				this.undo.record(label, [{ path: file.path, before, after }]);
+			}
+			return this.undo.peekUndo();
 		});
 	}
 
@@ -994,15 +1001,23 @@ export default class PrmPlugin extends Plugin {
 		}
 
 		const heading = this.settings.followUpHeading.trim() || "Follow-ups";
+		let wrote = false;
 		const entry = await this.tracked(file, `Add follow-up for ${record.name}`, async () => {
 			try {
-				await this.app.vault.process(file, (content) =>
-					appendFollowUp(content, heading, clean),
-				);
+				await this.app.vault.process(file, (content) => {
+					const next = appendFollowUp(content, heading, clean);
+					wrote = true;
+					return next;
+				});
 			} catch (error) {
 				this.reportWriteError(file, error);
 			}
 		});
+
+		// The inner catch swallows the error so the queue isn't poisoned, which meant a
+		// failed write still reported "Follow-up added" — two toasts, one of them a lie,
+		// and the input already cleared. `completeLoop` gates on this; this didn't.
+		if (!wrote) return false;
 		this.afterWrite(`Follow-up added for ${record.name}.`, entry);
 		return true;
 	}
@@ -1016,12 +1031,16 @@ export default class PrmPlugin extends Plugin {
 		const label = `Log contact with ${file.basename}`;
 		try {
 			const entry = await this.tracked(file, label, async () => {
-				if (this.settings.logToBody) await this.appendBodyLog(file, date, note);
+				// Frontmatter first. The failure this guards against is malformed YAML —
+				// which is exactly what processFrontMatter throws on — and with the body
+				// log written first, that left the bullet applied with no undo entry, so
+				// every retry added another copy.
 				await this.app.fileManager.processFrontMatter(file, (fm: MutableFrontmatter) => {
 					fm[FRONTMATTER_KEYS.lastContacted] = date;
 					// An explicit "I've handled this" makes any snooze meaningless.
 					delete fm[FRONTMATTER_KEYS.snoozeUntil];
 				});
+				if (this.settings.logToBody) await this.appendBodyLog(file, date, note);
 			});
 			this.afterWrite(`Logged contact with ${file.basename}.`, entry);
 		} catch (err) {

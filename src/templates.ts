@@ -71,11 +71,39 @@ export function defaultPersonNote(vars: TemplateVars): string {
 	const fields = vars.fields ?? {};
 	const front: string[] = ["---", "tags:", "  - people", `created: ${now().format(DEFAULT_DATE)}`];
 	for (const [key, value] of Object.entries(fields)) {
-		if (value.trim().length > 0) front.push(`${key}: ${value}`);
+		if (value.trim().length > 0) front.push(`${key}: ${yamlScalar(value)}`);
 	}
 	front.push("---");
 
 	return [...front, "", "# Facts", "", "# Thoughts", ""].join("\n");
+}
+
+/**
+ * A YAML-safe scalar.
+ *
+ * This block is built by interpolation rather than through `processFrontMatter`,
+ * because the note doesn't exist yet — so values from an address book land in YAML
+ * unescaped. Real Google Contacts rows break it: `Organization Name` of
+ * "Rosen: Consulting" gives `company: Rosen: Consulting`, which is a parse error and
+ * loses the whole block; `#1 Bakery` parses to null, losing the value silently; and a
+ * value containing a newline plus `---` terminates the frontmatter early and spills
+ * the rest into the body.
+ *
+ * Quoting only when needed keeps the common case readable.
+ */
+function yamlScalar(value: string): string {
+	const text = value.replace(/\r\n?/g, "\n");
+	const needsQuotes =
+		// Anything with a structural character, or that YAML would read as another type.
+		/[:#\n\t"'\\{}[\],&*?|<>=!%@`]/.test(text) ||
+		/^\s|\s$/.test(text) ||
+		text.length === 0 ||
+		/^[-?]/.test(text) ||
+		/^(true|false|null|yes|no|on|off|~)$/i.test(text) ||
+		/^[+-]?(\d|\.\d)/.test(text);
+	if (!needsQuotes) return text;
+	// Double quotes, so an embedded newline can be escaped rather than folded.
+	return `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
 }
 
 /** Characters Obsidian and the filesystem won't accept in a note title. */

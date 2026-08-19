@@ -165,13 +165,53 @@ Editing files on disk changes nothing in a running session and `Cmd+R` is not en
 disable and re-enable the plugin. Rule this out before debugging a CSS or new-view
 problem — it has wasted a whole debugging session.
 
-### 4.4 The metadata cache updates asynchronously after a write
+### 4.4 Never take a byte offset from the cache into a write
+
+`metadataCache` is correct about structure (it knows what's inside a code fence) and
+**wrong about position immediately after a write**, because it updates asynchronously.
+Taking a heading's `position.end.offset` from the cache and slicing the file at it put
+a log bullet inside the frontmatter and destroyed it — the caller had grown the
+frontmatter first, so the offset was short by exactly that many bytes. A length guard
+cannot detect this.
+
+Locate structure from **the content passed to `vault.process`**. `markdown.ts` exists
+for this: `findHeading`/`sectionEnd`/`shallowestHeadingLevel` scan the real bytes and
+skip frontmatter and fenced code, so they are neither stale nor fooled by a heading
+shown as an example inside a fence. Both hazards are real and were both live.
+
+### 4.5 The metadata cache updates asynchronously after a write
 
 A rebuild triggered immediately after a write can see a note **without its
 frontmatter**, which rendered as "unclassified" in a panel that only drew once. Any
 long-lived UI showing record data should subscribe to `engine.onChange` and redraw.
 
 ---
+
+### 4.6 Obsidian's `button` rule sets *three* properties
+
+`button:not(.clickable-icon)` sets `background-color`, `box-shadow` **and `color`**.
+Covering the first two and forgetting the third is a mistake already made here: every
+tier chip rendered neutral grey and the "unknown tier" chip stopped being red, long
+after the "fix". If you are fighting this rule, enumerate all three.
+
+### 4.7 A media query measures the window, not the pane
+
+Obsidian sidebars are narrow while the window is wide, so `@media (max-width: …)`
+**never fires for the case you wrote it for**. The plugin's entire narrow-layout block
+was dead: a 320px sidebar in a 1100px window kept the wide layout, overflowed, and
+clipped the sort control out of reach behind `overflow: hidden`. Use `@container`, with
+`container-type: inline-size` on the view root — Obsidian's own `app.css` does.
+
+### 4.8 Read Obsidian's real CSS instead of reasoning about it
+
+```bash
+strings -n 4 /Applications/Obsidian.app/Contents/Resources/obsidian.asar \
+  | grep -A 20 "^button {"
+```
+
+Every CSS conclusion in this file came from that command. Three separate rounds of
+plausible reasoning about `color-mix`, `--accent-h/s/l` and fallback ordering were all
+wrong, and none of it mattered — the declarations were correct and never applied.
 
 ## 5. Build, deploy, verify
 
@@ -303,6 +343,24 @@ Don't "fix" these without discussion — each was a decision.
   code block (no JS API), it renders day-cell year heatmaps only (so the weekly/monthly/
   yearly scales would be lost), click-to-see-who needs our own handlers, and Obsidian
   cannot express a plugin dependency. Its *palette* idea was worth borrowing.
+- **Known, deliberately not fixed** (from the five-agent review; each has a reason):
+  - `locateTask` prefers the recorded byte offset over the recorded line, so an edit
+    above a task can make it tick off a *different* task. A text fingerprint on the ref
+    is the fix; it needs a `LoopRef` schema change and a migration.
+  - Markdown-style links (`[Bob](People/Bob.md)`, i.e. wikilinks off) and `[[Bob.md]]`
+    are not attributed — the link map registers paths without the extension and a miss
+    is final. Cheap fix available: also register the path as written, or fall back to
+    `getFirstLinkpathDest` on a miss.
+  - Derived status is a snapshot of `today`; nothing re-runs at midnight, so a vault
+    left open overnight shows yesterday's queue until the next note edit.
+  - An ambiguous person name where Obsidian resolves to a *non-person* note discards
+    the link rather than falling back to the map hit, so both people lose it.
+  - The calendar grid is one tab stop per cell (368 of them) with no arrow-key
+    navigation, and dashboard rows aren't focusable, so opening a person panel is
+    mouse-only.
+  - `skipped` in the import result mixes notes and fields, so one contact with four
+    stale fields reports "4 skipped".
+
 - **`MOC` is in the default person-name exclusions**, which also excludes a person
   legitimately named e.g. "Moc". Matching is whole-word to limit the damage.
 - **The `history/pre-conventional` branch** preserves pre-rewrite commit history.
