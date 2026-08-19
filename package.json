@@ -13,7 +13,8 @@
     "deploy:watch": "node esbuild.config.mjs",
     "test": "npm run typecheck && npm run lint && node tests/run.cjs",
     "lint": "eslint src",
-    "test:only": "node tests/run.cjs"
+    "test:only": "node tests/run.cjs",
+    "ui": "node tests/ui/build.mjs"
   },
   "keywords": [
     "obsidian",

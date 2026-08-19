@@ -37,7 +37,18 @@ export class Setting {
   get nameEl(){ return document.createElement("div"); }
 }
 export const MarkdownRenderer = { render: async () => {} };
-export const Platform = { isMobile: false, isPhone: false, isDesktop: true };
+// Follows ?device= so a harness run reports the same platform the body classes say.
+// Real Obsidian sets both; a shim that hard-codes isDesktop would hide every
+// Platform.isMobile branch in the code under test.
+const __device = new URLSearchParams(location.search).get("device") || "desktop";
+export const Platform = {
+  isMobile: __device === "phone" || __device === "tablet",
+  isPhone: __device === "phone",
+  isTablet: __device === "tablet",
+  isDesktop: __device === "desktop",
+  isIosApp: false,
+  isAndroidApp: false,
+};
 export const moment = () => ({ isValid: () => false, format: () => "" });
 export function getAllTags(){ return []; }
 export function getLinkpath(l){ return l; }

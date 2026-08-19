@@ -12,3 +12,8 @@ dist/
 
 # Test build output (tests/build.cjs writes here)
 tests/.build/
+
+# UI harness build output (tests/ui/build.mjs writes these)
+tests/ui/*.bundle.js
+tests/ui/styles.css
+tests/ui/.shot-*.png

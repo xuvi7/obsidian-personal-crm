@@ -1,5 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PRM calendar harness</title>
 <link rel="stylesheet" href="styles.css">
 <style>
@@ -59,6 +60,19 @@ window.createEl = (tag, o) => applyOpts(document.createElement(tag), o);
 window.createDiv = (o) => window.createEl("div", o);
 window.createSpan = (o) => window.createEl("span", o);
 String.prototype.contains = function (s) { return this.indexOf(s) !== -1; };
+</script>
+<script>
+  /* Real Obsidian puts .is-mobile / .is-phone / .is-tablet on the body and keys its
+     own CSS off them; this plugin does too. Without these the mobile rules never
+     fire and the harness would report the desktop layout as if it were the phone.
+     Drive it with ?device=phone, ?device=tablet, or omit for desktop. */
+  (function () {
+    var d = new URLSearchParams(location.search).get("device");
+    var b = document.body;
+    if (d === "phone") b.classList.add("is-mobile", "is-phone");
+    else if (d === "tablet") b.classList.add("is-mobile", "is-tablet");
+    b.dataset.device = d || "desktop";
+  })();
 </script>
 <script src="calview.bundle.js"></script>
 <script>
