@@ -3,6 +3,46 @@
 All notable changes to Personal CRM. Versions follow
 [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Changed
+
+- **The dashboard, the calendar and the dialogs are usable on a phone.** Every
+  interactive element was under the 44px minimum tap target — the row checkbox was
+  13×13, the row's icon buttons 21×28, a calendar day 13px, and the panel's action
+  buttons 27.5px. All of them now meet it on mobile. The checkbox and the follow-up
+  checkbox draw at 22px but take taps across the full 44px, so they read as checkboxes
+  rather than buttons.
+- **Text fields reach 16px on mobile**, because below that iOS zooms the whole pane
+  whenever a field takes focus — so logging a contact meant pinching back out
+  afterwards. Affected the note, date and follow-up boxes.
+- **A phone gets a much shorter header.** It was taking about 700px of an 804px pane,
+  which left room for one and a half people: a title Obsidian's own view header already
+  shows, two wrapped rows of buttons, two of stats, two of filter tabs, then the
+  toolbar. The title goes, the buttons become an icon-only row, and the tabs and stats
+  each become one horizontally-scrolling row. 700px of chrome becomes 196px, and six
+  people fit where one and a half did.
+- **On a phone the per-row icon buttons are gone.** Unusable at 21×28, a whole line per
+  row at 44px, and every one of them is already in the panel that tapping the row
+  opens — which is the fast path on a touch device. Tablets and desktops keep them.
+- Calendar days go from 13px to 22px, and the month and year scales grow to match.
+  Tapping a day already revealed who it was; that now works with a finger, and the
+  scale tabs are full-height.
+- Sizing follows Obsidian's own `.is-mobile` / `.is-phone` body classes rather than a
+  `pointer: coarse` media query, which Obsidian never uses. A laptop with a touchscreen
+  keeps the desktop layout; a tablet gets the tap targets without the phone's
+  space-saving. **The desktop layout is unchanged** — verified element by element.
+
+### Fixed
+
+- The narrow-pane toolbar set `flex-direction: column` while still inheriting
+  `flex-wrap: wrap` from the wide layout, and wrap in a column container makes items
+  form extra *columns*: the toolbar was laid out at its 483px content width inside a
+  331px pane, so the sort dropdown sat 143px past the edge, clipped and unreachable
+  behind `overflow: hidden`. Affected every pane under 700px, not only phones.
+- Header buttons carry an `aria-label` and an icon each — previously "Reach out" had
+  neither an aria-label nor, in Triage's case, an icon.
+
 ## 1.6.0 — 2026-08-19
 
 ### Added

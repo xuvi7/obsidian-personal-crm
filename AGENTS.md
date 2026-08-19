@@ -213,6 +213,58 @@ Every CSS conclusion in this file came from that command. Three separate rounds 
 plausible reasoning about `color-mix`, `--accent-h/s/l` and fallback ordering were all
 wrong, and none of it mattered — the declarations were correct and never applied.
 
+### 4.9 Mobile is a body class, not a media query
+
+Obsidian puts `.is-mobile`, `.is-phone`, `.is-tablet`, `.is-ios` and `.is-android` on the
+body and keys **288** of its own rules off `.is-phone`. It never uses `pointer: coarse`
+anywhere. Follow the host: take its word for the device rather than inferring one, so a
+laptop with a touchscreen does not get phone layout.
+
+The mobile section of `styles.css` defines four tokens under `body.is-mobile` and nothing
+anywhere else:
+
+| Token | Value | Why |
+| --- | --- | --- |
+| `--prm-tap` | `44px` | the platform minimum tap target on iOS and Android |
+| `--prm-field-font` | `16px` | **below 16px, iOS zooms the pane when a field takes focus** |
+| `--prm-link-pad` | `8px` | grows an inline link's hit box |
+| `--prm-cell-size` | `22px` | calendar day cell; 13px is ~3.4mm |
+
+Every rule reads them with a fallback — `min-height: var(--prm-tap, auto)` — so off mobile
+the token is undefined, the fallback applies, and **the desktop layout is byte-identical**.
+Verified by loading the harness with and without `?device=phone`. Two consequences:
+
+- **Never declare one of those tokens outside a `body.is-mobile` block.** It would turn
+  every fallback in the file into a live value on the desktop at once.
+- **Tap sizes are in `px`, never `rem`.** `rem` follows the root font size, which themes
+  change; at a 14px root a `2rem` minimum silently becomes 28px. That is a bug this
+  codebase already shipped once, inside a single session.
+
+`.is-phone` additionally buys back vertical space, because the chrome was taking ~700px of
+an 804px pane and leaving room for one and a half people:
+
+- the `<h2>` goes — Obsidian's own view header already names the view on a phone;
+- header button labels go, leaving an icon-only row. This is why `renderHeader` wraps every
+  label in `.prm-btn-label` and gives every button an `aria-label` **and** an icon. Adding a
+  header button without all three leaves an unnamed blank square on a phone; `test-mobile`
+  fails if you do;
+- the filter tabs and the stats strip become one horizontally-scrolling row each;
+- **the per-row icon buttons go.** At 21×28 they were unusable and at 44px they cost a line
+  per row, and every one of them is in the panel a row-tap opens — the fast path on touch.
+  Tablets and desktops keep them.
+
+Chrome 700px → 196px, rows 190px → 144px, one and a half rows visible → six.
+
+Two traps that are not about size:
+
+- `.prm-row-meta` and `.prm-name-row` are **flex** containers, so `padding-block` on a link
+  inside them grows the box for real rather than just overflowing a line box, and fights
+  the default `align-items: stretch`. They set `align-items: center` on mobile.
+- `flex-wrap: wrap` in a `flex-direction: column` container makes items wrap into extra
+  **columns**. The narrow toolbar inherited `wrap` from the wide layout, grew to its
+  483px max-content width inside a 331px pane, and pushed the sort control off the edge
+  behind `.prm-view { overflow: hidden }`. Any pane under 700px had this, phone or not.
+
 ## 5. Build, deploy, verify
 
 ```bash
@@ -230,7 +282,7 @@ sanctioned APIs are `setCssProps` (custom properties) and `setCssStyles`.
 ### Tests
 
 ```bash
-npm test                          # typecheck + lint + all 25 suites
+npm test                          # typecheck + lint + all 26 suites
 npm run test:only                 # just the suites (skips typecheck/lint)
 node tests/test-drift.cjs         # one suite, directly
 ```
@@ -243,7 +295,7 @@ that output when a suite actually fails.
 
 Each suite is a standalone Node script with its own tiny `check()` helper. They bundle the
 **real** source with esbuild and drive it against a fake vault (`tests/stub-obsidian.cjs`)
-that stores real text and computes a realistic metadata cache. ~520 assertions across 25
+that stores real text and computes a realistic metadata cache. ~530 assertions across 26
 files.
 
 Shared helpers live in `tests/build.cjs`:
@@ -286,11 +338,22 @@ runs behaviour.
 
 ### Verifying UI changes
 
+```bash
+npm run ui                        # build the harness bundles + copy styles.css
+python3 -m http.server 8731       # from tests/ui/ — file:// blocks the module loads
+```
+
 Browser harnesses under `tests/ui/` render the **real** components against the **real**
 `styles.css` in Chrome: `dashboard.html` (`?n=3000` for scale), `calendar.html`,
 `modals.html`, `create.html`, `import.html`. Each loads a `*-entry.ts` that imports
 straight from `../../src/`, so they cannot drift from the source; `obsidian-shim.js` and
-`obsidian-shim-modals.js` stand in for the host API.
+`obsidian-shim-modals.js` stand in for the host API. Bundles and the stylesheet copy are
+gitignored — **run `npm run ui` again after any change to `src/` or `styles.css`**, or you
+are looking at the previous build.
+
+`?device=phone` and `?device=tablet` put the same body classes on that Obsidian does and
+make the shim's `Platform` agree with them (see §4.9). Omit it for desktop. Compare the
+two: a mobile change that alters the desktop layout is a bug.
 
 **Treat harness output with suspicion.** It has flattered reality five separate times,
 each hiding a real bug:
@@ -303,6 +366,9 @@ each hiding a real bug:
 | `setIcon()` building a 2-element SVG | icon cost looked free; it is ~14% of a large render |
 | `applyOpts` ignoring `value` | `<option>`s were valueless, so the sort dropdown was never exercised |
 | `debounce` as a passthrough | made the search path look dearer than it is |
+| no `<meta name="viewport">` in the browser harnesses | mobile emulation used the legacy 980px layout viewport, so a "390px phone" laid out at 940px and no narrow rule fired |
+| `__matches` treating a space as part of a class name | `querySelectorAll(".prm-header-buttons button")` returned `[]`, and three assertions over the result passed against nothing |
+| `setIcon` as a no-op in the Node stub | "does this button have an icon?" was unanswerable, which matters once a phone hides the label |
 
 The lesson: **when a stub reimplements host behaviour, copy the host's real shape** —
 including selector specificity. A harness that cannot fail is not evidence. If a user
