@@ -1,6 +1,6 @@
 {
   "name": "obsidian-personal-crm",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Personal relationship manager for Obsidian, built around a People/ folder and journal backlinks.",
   "main": "main.js",
   "type": "module",
