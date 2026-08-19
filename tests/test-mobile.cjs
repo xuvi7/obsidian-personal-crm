@@ -277,7 +277,6 @@ async function bootView(count = 1) {
     const view = await bootView(4);
     const root = view.contentEl;
     const bar = () => root.querySelector(".prm-bulkbar");
-    const boxes = () => root.querySelectorAll(".prm-select");
     const label = (sel) => {
       const el = root.querySelector(sel);
       if (!el) return null;
@@ -291,11 +290,20 @@ async function bootView(count = 1) {
       assert.ok(!bar().classes.has("prm-bulkbar-active"));
     });
 
-    // Tick one of four: a partial selection.
+    check("the toolbar no longer carries its own Select all", () => {
+      // Two buttons with the same name, one of which silently no-ops, was the whole
+      // confusion. Selection's Select all lives in the bar now.
+      const toolbarButtons = root.querySelectorAll(".prm-controls button");
+      for (const b of toolbarButtons) {
+        assert.notStrictEqual((b.text || "").trim(), "Select all",
+          "the toolbar's Select all is back");
+      }
+    });
+
     view.onSelectClick("People/P0.md", { shiftKey: false }, { checked: true });
 
     check("selecting puts the view into selection mode", () => {
-      // The phone stylesheet hangs the hiding of stats/tabs/search/sort off this class,
+      // The phone stylesheet hangs the hiding of stats and toolbar off this class,
       // rather than :has(), so it must be on the root whenever a selection exists.
       assert.ok(root.classes.has("prm-selecting"));
       assert.ok(bar().classes.has("prm-bulkbar-active"));
@@ -309,41 +317,62 @@ async function bootView(count = 1) {
       assert.ok((dismiss.getAttribute("aria-label") || "").length > 0, "dismiss is unnamed");
     });
 
-    check("a partial selection offers Select all", () =>
-      assert.strictEqual(label(".prm-bulk-toggle"), "Select all"));
-
-    check("Select all takes everything listed", () => {
-      root.querySelector(".prm-bulk-toggle").onclick();
+    check("Select all is in the bar and takes everything listed", () => {
+      assert.strictEqual(label(".prm-bulk-selectall"), "Select all");
+      root.querySelector(".prm-bulk-selectall").onclick();
       assert.strictEqual(label(".prm-bulk-count"), "4 selected");
     });
 
-    check("with everything selected the same slot becomes Clear", () =>
-      // "Select all" is a no-op at this point, so the slot carries the clear instead of
-      // sitting dead — which is what buys the bar one line on a phone.
-      assert.strictEqual(label(".prm-bulk-toggle"), "Clear"));
-
-    check("that Clear empties the selection and leaves selection mode", () => {
-      root.querySelector(".prm-bulk-toggle").onclick();
-      assert.ok(!root.classes.has("prm-selecting"));
-      assert.ok(!bar().classes.has("prm-bulkbar-active"));
+    check("it stays Select all even with everything selected", () => {
+      // It is not a dead slot to reuse: change the filter and the listed set changes
+      // under it, so it is useful again. The count is what clears.
+      assert.strictEqual(label(".prm-bulk-selectall"), "Select all");
     });
 
-    check("tapping the count clears from a partial selection too", () => {
+    check("tapping the count clears, from any state", () => {
+      root.querySelector(".prm-bulk-dismiss").onclick();
+      assert.ok(!root.classes.has("prm-selecting"));
       view.onSelectClick("People/P1.md", { shiftKey: false }, { checked: true });
       assert.strictEqual(label(".prm-bulk-count"), "1 selected");
       root.querySelector(".prm-bulk-dismiss").onclick();
       assert.ok(!root.classes.has("prm-selecting"),
-        "the count did not clear, so a partial selection has no one-tap exit");
+        "a partial selection has no one-tap exit");
+    });
+
+    check("the filter button names the active filter", () => {
+      view.onSelectClick("People/P2.md", { shiftKey: false }, { checked: true });
+      const btn = root.querySelector(".prm-bulk-filter");
+      assert.ok(btn, "no filter button");
+      assert.ok((btn.getAttribute("aria-label") || "").startsWith("Filter:"),
+        btn.getAttribute("aria-label"));
+      // A phone hides the tabs while selecting, so this label is the only thing left
+      // saying which filter is on.
+      assert.ok(label(".prm-bulk-filter").length > 0, "the filter button has no label");
+    });
+
+    check("changing filter redraws the bar, so its label cannot go stale", () => {
+      const before = label(".prm-bulk-filter");
+      // The tab handler used to call renderToolbar and renderList but not
+      // renderBulkBar, which left this label describing the tab you had left.
+      view.setFilter("drifting");
+      const after = label(".prm-bulk-filter");
+      assert.notStrictEqual(after, before, `still "${after}" after changing filter`);
+    });
+
+    check("a search marks the filter button", () => {
+      view.setQuery("#gym");
+      const btn = root.querySelector(".prm-bulk-filter");
+      assert.ok(btn.classes.has("prm-bulk-filter-on"), "a live query is not shown");
+      assert.ok((btn.getAttribute("aria-label") || "").includes("#gym"),
+        btn.getAttribute("aria-label"));
+      view.setQuery("");
     });
 
     check("both renderings of the actions are built, from one list", () => {
-      view.onSelectClick("People/P2.md", { shiftKey: false }, { checked: true });
       const buttons = root.querySelectorAll(".prm-bulk-btn");
       const more = root.querySelector(".prm-bulk-more");
       assert.strictEqual(buttons.length, 6, `${buttons.length} action buttons`);
       assert.ok(more, "no Actions button for the sheet");
-      // Both are always present and CSS picks one, so a resize across the phone/tablet
-      // boundary — which Obsidian re-evaluates live — cannot strand the wrong shape.
       assert.strictEqual(typeof more.onclick, "function");
     });
 
@@ -357,11 +386,28 @@ async function bootView(count = 1) {
 
   console.log("\nThe phone bar hides what it replaces");
   {
-    check("the six labelled buttons give way to the sheet on a phone", () => {
-      const hide = ruleBody("body.is-phone .prm-bulkbar .prm-bulk-btn {");
-      assert.ok(hide && /display:\s*none/.test(hide), "the row is not hidden: " + hide);
+    check("the button row gives way to the sheet on a phone", () => {
+      const i = CSS.indexOf("body.is-phone .prm-bulkbar .prm-bulk-btn,");
+      assert.ok(i !== -1, "the hide rule is gone");
+      const sel = CSS.slice(i, CSS.indexOf("{", i));
+      // Select all is hidden with the six, because on a phone it leads the sheet.
+      assert.ok(sel.includes(".prm-bulk-selectall"), "Select all is not hidden too: " + sel);
+      const body = CSS.slice(CSS.indexOf("{", i), CSS.indexOf("}", i));
+      assert.ok(/display:\s*none/.test(body), body);
       const show = ruleBody("body.is-phone .prm-bulk-more,");
       assert.ok(show && /display:\s*flex/.test(show), "the sheet button is not shown: " + show);
+    });
+
+    check("the filter button is the phone's stand-in for the hidden toolbar", () => {
+      const hidden = ruleBody(".prm-bulk-more,");
+      assert.ok(hidden && /display:\s*none/.test(hidden),
+        "the filter button shows on wide panes, where the toolbar is already there");
+      const shown = ruleBody("body.is-phone .prm-bulk-more,");
+      assert.ok(shown && /display:\s*flex/.test(shown), shown);
+      const search = ruleBody(".prm-sheet-search {");
+      // The sheet's search box is a text field, so it is under the same iOS rule.
+      assert.ok(search && /font-size:\s*var\(--prm-field-font/.test(search),
+        "the sheet's search box can zoom the pane on iOS: " + search);
     });
 
     check("the bar is one line on a phone", () => {

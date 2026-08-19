@@ -1875,23 +1875,28 @@ body.is-mobile .prm-cal-body {
 }
 
 /*
- * Which rendering of the actions is shown is decided in CSS, not in TypeScript, so a
- * resize across the phone/tablet boundary — which Obsidian re-evaluates live on every
- * resize — cannot leave the bar in the shape the other width wanted.
+ * Which rendering is shown is decided in CSS, not in TypeScript, so a resize across the
+ * phone/tablet boundary — which Obsidian re-evaluates live on every resize — cannot
+ * leave the bar in the shape the other width wanted.
+ *
+ * Wide: the count, Select all, and the six actions as a row.
+ * Phone: the count, the filter, and one Actions button; Select all and the six actions
+ * are rows of the sheet it opens.
  */
 .prm-bulk-more,
-.prm-bulk-toggle {
+.prm-bulk-filter {
 	display: none;
 }
 
 body.is-phone .prm-bulk-more,
-body.is-phone .prm-bulk-toggle {
+body.is-phone .prm-bulk-filter {
 	display: flex;
 	align-items: center;
 	gap: 0.3rem;
 }
 
-body.is-phone .prm-bulkbar .prm-bulk-btn {
+body.is-phone .prm-bulkbar .prm-bulk-btn,
+body.is-phone .prm-bulk-selectall {
 	display: none;
 }
 
@@ -1917,9 +1922,15 @@ body.is-phone .prm-bulk-count {
 	white-space: nowrap;
 }
 
-body.is-phone .prm-bulk-toggle,
+body.is-phone .prm-bulk-filter,
 body.is-phone .prm-bulk-more {
 	flex: 0 0 auto;
+}
+
+/* The filter button is the only thing left saying which filter is active, so when a
+   search is also narrowing the list it says so in the accent colour. */
+body.is-phone .prm-bulk-filter-on {
+	color: var(--text-accent);
 }
 
 body.is-phone .prm-bulk-more {
@@ -1954,4 +1965,18 @@ body.is-phone .prm-selecting .prm-toolbar {
 	text-align: left;
 	min-height: var(--prm-tap, 2.2rem);
 	padding-inline: 0.7rem;
+}
+
+/* The search box inside the filter sheet: full width, and 16px so iOS does not zoom. */
+.prm-sheet-search {
+	width: 100%;
+	box-sizing: border-box;
+	min-height: var(--prm-tap, 2.2rem);
+	margin-bottom: 0.5rem;
+	font-size: var(--prm-field-font, inherit);
+}
+
+.prm-sheet-btn-active {
+	font-weight: 600;
+	color: var(--text-normal);
 }

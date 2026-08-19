@@ -360,6 +360,65 @@ export interface BulkAction {
 }
 
 /**
+ * The filter tabs and the search box as a sheet.
+ *
+ * A phone hides the whole toolbar while a selection is live, which is right — none of
+ * it is what you are using — except that it also takes away the two controls that make
+ * a selection worth extending: the tabs, and the search. Selecting everyone in "Due",
+ * switching to "Drifting" and selecting those too is the flow this exists for.
+ */
+export class FilterSheetModal extends Modal {
+	constructor(
+		plugin: PrmPlugin,
+		private opts: {
+			filters: { key: string; label: string }[];
+			active: string;
+			query: string;
+			onFilter: (key: string) => void;
+			onQuery: (query: string) => void;
+		},
+	) {
+		super(plugin.app);
+		this.modalEl.addClass("prm-bulk-sheet");
+	}
+
+	onOpen(): void {
+		this.titleEl.setText("Filter");
+
+		// Search first, but deliberately not focused: a phone would raise the keyboard
+		// over the list of filters underneath, which is the more likely reason to be here.
+		const search = this.contentEl.createEl("input", {
+			cls: "prm-search prm-sheet-search",
+			attr: { type: "search", placeholder: "Name, #tag or @place…" },
+		});
+		search.value = this.opts.query;
+		search.oninput = () => this.opts.onQuery(search.value);
+
+		const list = this.contentEl.createDiv({ cls: "prm-sheet-list" });
+		for (const f of this.opts.filters) {
+			const btn = list.createEl("button", { cls: "prm-sheet-btn" });
+			const on = f.key === this.opts.active;
+			// A check on the active one, and a blank of the same size on the rest, so the
+			// labels stay in one column instead of stepping in and out.
+			setIcon(btn.createSpan({ cls: "prm-action-icon" }), on ? "check" : "dot");
+			btn.createSpan({ text: f.label });
+			if (on) btn.addClass("prm-sheet-btn-active");
+			btn.setAttribute("aria-current", on ? "true" : "false");
+			btn.onclick = () => {
+				this.opts.onFilter(f.key);
+				// Close on picking a filter, so the result is visible; typing in the
+				// search box leaves the sheet open, since a query is usually refined.
+				this.close();
+			};
+		}
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/**
  * The bulk actions as a sheet, for panes too narrow to show them as a row.
  *
  * Labelled rather than icon-only on purpose: `tag` and `tags` are near-identical

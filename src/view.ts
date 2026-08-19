@@ -6,6 +6,7 @@ import { formatDuration, relativeToToday, todayISO } from "./dates";
 import {
 	type BulkAction,
 	BulkActionsModal,
+	FilterSheetModal,
 	LogContactModal,
 	PlacePickerModal,
 	PersonActionsModal,
@@ -357,26 +358,46 @@ export class PrmDashboardView extends ItemView {
 		dismiss.setAttribute("aria-label", `Clear the selection of ${paths.length}`);
 		dismiss.onclick = () => this.clearSelection();
 
-		// One slot, two states: "Select all" does nothing once everything listed is
-		// selected, so at that point the slot becomes the clear instead of sitting
-		// dead. That is what buys the bar a single line on a phone.
-		const listed = this.visiblePaths();
-		const allListed = listed.length > 0 && listed.every((p) => this.selection.has(p));
-		const toggle = bar.createEl("button", { cls: "prm-bulk-toggle" });
-		if (allListed) {
-			toggle.setText("Clear");
-			toggle.setAttribute("aria-label", "Clear the selection");
-			toggle.onclick = () => this.clearSelection();
-		} else {
-			toggle.setText("Select all");
-			toggle.setAttribute("aria-label", "Select every person currently listed");
-			toggle.onclick = () => {
-				for (const path of listed) this.selection.add(path);
+		// Select all is never a dead slot, even when everything listed is already
+		// selected: change the filter and the listed set changes under it. So it stays
+		// itself rather than doubling as the clear — the count does that.
+		const selectAll: BulkAction = {
+			label: "Select all",
+			icon: "list-checks",
+			run: () => {
+				for (const path of this.visiblePaths()) this.selection.add(path);
 				this.lastClicked = null;
 				this.renderBulkBar();
 				this.syncRowSelectedClass();
-			};
-		}
+			},
+		};
+		const allBtn = bar.createEl("button", { cls: "prm-bulk-selectall", text: selectAll.label });
+		allBtn.setAttribute("aria-label", "Select every person currently listed");
+		allBtn.onclick = selectAll.run;
+
+		// A phone hides the whole toolbar while selecting, which took the filter tabs and
+		// the search box with it — and selecting across filters is the reason Select all
+		// stays useful. This button carries both, and its label is the only thing left
+		// saying which filter is active.
+		const activeFilter = FILTERS.find((f) => f.key === this.filter);
+		const filterBtn = bar.createEl("button", { cls: "prm-bulk-filter" });
+		setIcon(filterBtn.createSpan({ cls: "prm-action-icon" }), "filter");
+		filterBtn.createSpan({ text: activeFilter?.label ?? "Filter" });
+		if (this.query.trim().length > 0) filterBtn.addClass("prm-bulk-filter-on");
+		filterBtn.setAttribute(
+			"aria-label",
+			this.query.trim().length > 0
+				? `Filter: ${activeFilter?.label ?? ""}, searching "${this.query.trim()}"`
+				: `Filter: ${activeFilter?.label ?? ""}`,
+		);
+		filterBtn.onclick = () =>
+			new FilterSheetModal(this.plugin, {
+				filters: FILTERS,
+				active: this.filter,
+				query: this.query,
+				onFilter: (key) => this.setFilter(key as FilterKey),
+				onQuery: (q) => this.setQuery(q),
+			}).open();
 
 		// Built once and used twice: the row of buttons a wide pane shows, and the sheet
 		// a phone opens instead. Two copies of this list would drift.
@@ -448,7 +469,9 @@ export class PrmDashboardView extends ItemView {
 		setIcon(more.createSpan({ cls: "prm-action-icon" }), "ellipsis");
 		more.createSpan({ text: "Actions" });
 		more.setAttribute("aria-label", `Actions for ${paths.length} selected`);
-		more.onclick = () => new BulkActionsModal(this.plugin, paths.length, actions).open();
+		more.onclick = () =>
+			// Select all leads the sheet: the button for it is hidden at this width.
+			new BulkActionsModal(this.plugin, paths.length, [selectAll, ...actions]).open();
 	}
 
 	private renderToolbar(): void {
@@ -462,25 +485,11 @@ export class PrmDashboardView extends ItemView {
 				text: f.label,
 			});
 			btn.onclick = () => {
-				this.filter = f.key;
-				this.renderToolbar();
-				this.renderList();
+				this.setFilter(f.key);
 			};
 		}
 
 		const controls = toolbar.createDiv({ cls: "prm-controls" });
-
-		// Select-all acts on what's visible, which after a filter is the useful set.
-		const all = controls.createEl("button", { cls: "prm-tab", text: "Select all" });
-		all.setAttribute("aria-label", "Select every person currently listed");
-		// Additive, not a toggle: the button's label can't announce a toggle's
-		// direction, and the bulk bar's Clear already undoes it.
-		all.onclick = () => {
-			for (const path of this.visiblePaths()) this.selection.add(path);
-			this.lastClicked = null;
-			this.renderBulkBar();
-			this.syncRowSelectedClass();
-		};
 
 		const search = controls.createEl("input", {
 			cls: "prm-search",
@@ -593,6 +602,20 @@ export class PrmDashboardView extends ItemView {
 		this.filter = "all";
 		this.renderAll();
 		this.setQuery(`@${place}`);
+	}
+
+	/**
+	 * Switch tab.
+	 *
+	 * The bulk bar has to be redrawn too, not just the toolbar and the list: it names
+	 * the active filter, and a tab click used to leave that label describing the tab
+	 * you had left.
+	 */
+	private setFilter(key: FilterKey): void {
+		this.filter = key;
+		this.renderToolbar();
+		this.renderList();
+		this.renderBulkBar();
 	}
 
 	/**
