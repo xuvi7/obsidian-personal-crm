@@ -348,6 +348,56 @@ export class TierPickerModal extends SuggestModal<TierChoice> {
 type BulkTier = { kind: "tier"; tier: Tier } | { kind: "clear" };
 
 /** Choose one cadence to apply to a whole selection. */
+/**
+ * One bulk action, defined once by the dashboard and rendered two ways: as a button in
+ * the bulk bar where there is room, and as a row of this sheet on a phone where there
+ * is not. Sharing the list is what stops the two from drifting apart.
+ */
+export interface BulkAction {
+	label: string;
+	icon: string;
+	run: () => void;
+}
+
+/**
+ * The bulk actions as a sheet, for panes too narrow to show them as a row.
+ *
+ * Labelled rather than icon-only on purpose: `tag` and `tags` are near-identical
+ * glyphs, so an icon-only bar would have made "Add tag" and "Remove tag"
+ * indistinguishable — on a pair of actions where picking the wrong one edits every
+ * selected note.
+ */
+export class BulkActionsModal extends Modal {
+	constructor(
+		plugin: PrmPlugin,
+		private count: number,
+		private actions: BulkAction[],
+	) {
+		super(plugin.app);
+		this.modalEl.addClass("prm-bulk-sheet");
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(`${this.count} ${this.count === 1 ? "person" : "people"}`);
+		const list = this.contentEl.createDiv({ cls: "prm-sheet-list" });
+		for (const action of this.actions) {
+			const btn = list.createEl("button", { cls: "prm-sheet-btn" });
+			setIcon(btn.createSpan({ cls: "prm-action-icon" }), action.icon);
+			btn.createSpan({ text: action.label });
+			btn.onclick = () => {
+				// Close first: every one of these opens a dialog of its own, and two
+				// stacked modals on a phone leaves no room for either.
+				this.close();
+				action.run();
+			};
+		}
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 export class TierChooserModal extends SuggestModal<BulkTier> {
 	constructor(
 		private plugin: PrmPlugin,

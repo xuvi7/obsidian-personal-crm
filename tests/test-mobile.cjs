@@ -39,9 +39,11 @@ function ruleBody(selector) {
   return open === -1 || close === -1 ? null : CSS.slice(open + 1, close);
 }
 
-async function bootView() {
+async function bootView(count = 1) {
   const v = makeVault();
-  v.addFile("People/Sam.md", "---\ntags:\n  - people\nprm-tier: casual\n---\n");
+  for (let i = 0; i < count; i++) {
+    v.addFile(`People/P${i}.md`, "---\ntags:\n  - people\nprm-tier: casual\n---\n");
+  }
   const p = new PluginClass(v.app, { id: "personal-crm" });
   p.__data = { configured: true, notifyOnStartup: false, showStatusBar: false,
     personFolders: ["People"], journalSources: [] };
@@ -267,6 +269,122 @@ async function bootView() {
       const m = /padding:\s*0\s+(\d+)px/.exec(body);
       assert.ok(m, "side padding is not a px value: " + body);
       assert.ok(Number(m[1]) >= 11, `${m[1]}px is under the overlay's 11px reach`);
+    });
+  }
+
+  console.log("\nSelection is a mode, and its bar is one line");
+  {
+    const view = await bootView(4);
+    const root = view.contentEl;
+    const bar = () => root.querySelector(".prm-bulkbar");
+    const boxes = () => root.querySelectorAll(".prm-select");
+    const label = (sel) => {
+      const el = root.querySelector(sel);
+      if (!el) return null;
+      // The stub keeps directly-set text on `text`; a wrapped label is on a child.
+      return (el.text || "").trim() ||
+        [...el.children].map((c) => (c.text || "").trim()).join(" ").trim();
+    };
+
+    check("nothing is selected to start, and the view is not in selection mode", () => {
+      assert.ok(!root.classes.has("prm-selecting"));
+      assert.ok(!bar().classes.has("prm-bulkbar-active"));
+    });
+
+    // Tick one of four: a partial selection.
+    view.onSelectClick("People/P0.md", { shiftKey: false }, { checked: true });
+
+    check("selecting puts the view into selection mode", () => {
+      // The phone stylesheet hangs the hiding of stats/tabs/search/sort off this class,
+      // rather than :has(), so it must be on the root whenever a selection exists.
+      assert.ok(root.classes.has("prm-selecting"));
+      assert.ok(bar().classes.has("prm-bulkbar-active"));
+    });
+
+    check("the count reports the selection and is a button that clears it", () => {
+      assert.strictEqual(label(".prm-bulk-count"), "1 selected");
+      const dismiss = root.querySelector(".prm-bulk-dismiss");
+      assert.ok(dismiss, "no dismiss button");
+      assert.strictEqual(typeof dismiss.onclick, "function");
+      assert.ok((dismiss.getAttribute("aria-label") || "").length > 0, "dismiss is unnamed");
+    });
+
+    check("a partial selection offers Select all", () =>
+      assert.strictEqual(label(".prm-bulk-toggle"), "Select all"));
+
+    check("Select all takes everything listed", () => {
+      root.querySelector(".prm-bulk-toggle").onclick();
+      assert.strictEqual(label(".prm-bulk-count"), "4 selected");
+    });
+
+    check("with everything selected the same slot becomes Clear", () =>
+      // "Select all" is a no-op at this point, so the slot carries the clear instead of
+      // sitting dead — which is what buys the bar one line on a phone.
+      assert.strictEqual(label(".prm-bulk-toggle"), "Clear"));
+
+    check("that Clear empties the selection and leaves selection mode", () => {
+      root.querySelector(".prm-bulk-toggle").onclick();
+      assert.ok(!root.classes.has("prm-selecting"));
+      assert.ok(!bar().classes.has("prm-bulkbar-active"));
+    });
+
+    check("tapping the count clears from a partial selection too", () => {
+      view.onSelectClick("People/P1.md", { shiftKey: false }, { checked: true });
+      assert.strictEqual(label(".prm-bulk-count"), "1 selected");
+      root.querySelector(".prm-bulk-dismiss").onclick();
+      assert.ok(!root.classes.has("prm-selecting"),
+        "the count did not clear, so a partial selection has no one-tap exit");
+    });
+
+    check("both renderings of the actions are built, from one list", () => {
+      view.onSelectClick("People/P2.md", { shiftKey: false }, { checked: true });
+      const buttons = root.querySelectorAll(".prm-bulk-btn");
+      const more = root.querySelector(".prm-bulk-more");
+      assert.strictEqual(buttons.length, 6, `${buttons.length} action buttons`);
+      assert.ok(more, "no Actions button for the sheet");
+      // Both are always present and CSS picks one, so a resize across the phone/tablet
+      // boundary — which Obsidian re-evaluates live — cannot strand the wrong shape.
+      assert.strictEqual(typeof more.onclick, "function");
+    });
+
+    check("every action button is labelled, since the tag icons are near-identical", () => {
+      for (const b of root.querySelectorAll(".prm-bulk-btn")) {
+        const text = [...b.children].map((c) => (c.text || "").trim()).join("").trim();
+        assert.ok(text.length > 0, "an action button has no label");
+      }
+    });
+  }
+
+  console.log("\nThe phone bar hides what it replaces");
+  {
+    check("the six labelled buttons give way to the sheet on a phone", () => {
+      const hide = ruleBody("body.is-phone .prm-bulkbar .prm-bulk-btn {");
+      assert.ok(hide && /display:\s*none/.test(hide), "the row is not hidden: " + hide);
+      const show = ruleBody("body.is-phone .prm-bulk-more,");
+      assert.ok(show && /display:\s*flex/.test(show), "the sheet button is not shown: " + show);
+    });
+
+    check("the bar is one line on a phone", () => {
+      const body = ruleBody("body.is-phone .prm-bulkbar-active {");
+      assert.ok(body && /flex-wrap:\s*nowrap/.test(body), "the bar can wrap: " + body);
+    });
+
+    check("selection mode hides the stats and the toolbar", () => {
+      // 180px of an ~800px pane, none of it useful mid-selection. Without this the bar
+      // stacked on top of the filter chrome and left three rows visible out of five.
+      const i = CSS.indexOf("body.is-phone .prm-selecting .prm-stats,");
+      assert.ok(i !== -1, "the selection-mode rule is gone");
+      const sel = CSS.slice(i, CSS.indexOf("{", i));
+      assert.ok(sel.includes(".prm-toolbar"), "the toolbar is not hidden: " + sel);
+      const body = CSS.slice(CSS.indexOf("{", i), CSS.indexOf("}", i));
+      assert.ok(/display:\s*none/.test(body), body);
+    });
+
+    check("the sheet's rows are tap-sized and full width", () => {
+      const body = ruleBody(".prm-sheet-btn {");
+      assert.ok(body, "no sheet button rule");
+      assert.ok(/min-height:\s*var\(--prm-tap/.test(body), "not tap-sized: " + body);
+      assert.ok(/width:\s*100%/.test(body), "not full width: " + body);
     });
   }
 

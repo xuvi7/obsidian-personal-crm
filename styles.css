@@ -1443,15 +1443,7 @@ a.prm-place:hover {
 
 /* Same cascade problem: all three of these lose to the app's button rule at one
    class, so it renders as a grey button rather than a ghost link. */
-.prm-bulkbar .prm-bulk-clear {
-	margin-left: auto;
-	background: transparent;
-	box-shadow: none;
-	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
-}
-
-.prm-bulk-clear:hover {
+.prm-bulk-dismiss:hover {
 	color: var(--text-normal);
 }
 
@@ -1470,9 +1462,6 @@ a.prm-place:hover {
 		gap: 0.3rem;
 	}
 
-	.prm-bulk-clear {
-		margin-left: 0;
-	}
 }
 
 /*
@@ -1865,4 +1854,104 @@ body.is-mobile .prm-calview .prm-cal-body[data-prm-scale="month"] .prm-cal-cell 
 body.is-mobile .prm-cal-body {
 	-webkit-overflow-scrolling: touch;
 	overscroll-behavior-x: contain;
+}
+
+/* ------------------------------------------------------- the bulk selection bar */
+/*
+ * The count is the clear. It is one tap from any state, which the toggle beside it
+ * cannot be: with a partial selection that toggle reads "Select all".
+ */
+.prm-bulk-dismiss {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	background: transparent;
+	box-shadow: none;
+	padding-inline: 0.3rem;
+}
+
+.prm-bulk-dismiss .prm-bulk-count {
+	margin-right: 0;
+}
+
+/*
+ * Which rendering of the actions is shown is decided in CSS, not in TypeScript, so a
+ * resize across the phone/tablet boundary — which Obsidian re-evaluates live on every
+ * resize — cannot leave the bar in the shape the other width wanted.
+ */
+.prm-bulk-more,
+.prm-bulk-toggle {
+	display: none;
+}
+
+body.is-phone .prm-bulk-more,
+body.is-phone .prm-bulk-toggle {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+}
+
+body.is-phone .prm-bulkbar .prm-bulk-btn {
+	display: none;
+}
+
+/*
+ * One line. Six labelled buttons wrapped to three rows and took 157px on top of an
+ * already 232px chrome, which left three people visible out of five.
+ */
+body.is-phone .prm-bulkbar-active {
+	flex-wrap: nowrap;
+	gap: 0.3rem;
+	padding: 0.4rem 0 0.5rem;
+}
+
+body.is-phone .prm-bulk-dismiss {
+	flex: 0 1 auto;
+	min-width: 0;
+}
+
+/* The count may be a five-digit vault; it gives way before the controls do. */
+body.is-phone .prm-bulk-count {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+body.is-phone .prm-bulk-toggle,
+body.is-phone .prm-bulk-more {
+	flex: 0 0 auto;
+}
+
+body.is-phone .prm-bulk-more {
+	margin-left: auto;
+}
+
+/*
+ * Selection is a mode. While one is live the stats, tabs, search and sort are all
+ * things you are not using, and they are ~180px of an ~800px pane — so the bar replaces
+ * them instead of stacking on top of them, and selecting ends up showing *more* rows
+ * than not selecting.
+ */
+body.is-phone .prm-selecting .prm-stats,
+body.is-phone .prm-selecting .prm-toolbar {
+	display: none;
+}
+
+/* ------------------------------------------------------------ the actions sheet */
+
+.prm-sheet-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+.prm-sheet-btn {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	width: 100%;
+	justify-content: flex-start;
+	text-align: left;
+	min-height: var(--prm-tap, 2.2rem);
+	padding-inline: 0.7rem;
 }

@@ -4,6 +4,8 @@ import { tierById } from "./settings";
 import type { PersonRecord, PersonStatus } from "./types";
 import { formatDuration, relativeToToday, todayISO } from "./dates";
 import {
+	type BulkAction,
+	BulkActionsModal,
 	LogContactModal,
 	PlacePickerModal,
 	PersonActionsModal,
@@ -338,19 +340,49 @@ export class PrmDashboardView extends ItemView {
 		const bar = this.bulkEl;
 		bar.empty();
 		const paths = this.selected();
-		bar.toggleClass("prm-bulkbar-active", paths.length > 0);
-		if (paths.length === 0) return;
+		const active = paths.length > 0;
+		bar.toggleClass("prm-bulkbar-active", active);
+		// A phone hides the stats, tabs, search and sort while a selection is live —
+		// none of them is what you want mid-selection, and they are ~180px of a pane
+		// that only has ~800. A class rather than `:has()`, so it cannot depend on
+		// selector support, and it is set from the one place selection size changes.
+		this.contentEl.toggleClass("prm-selecting", active);
+		if (!active) return;
 
-		bar.createSpan({
-			cls: "prm-bulk-count",
-			text: `${paths.length} selected`,
-		});
+		// Clearing is one tap from any state. The toggle beside it cannot serve as the
+		// clear when the selection is partial, because there it reads "Select all".
+		const dismiss = bar.createEl("button", { cls: "prm-bulk-dismiss" });
+		setIcon(dismiss.createSpan({ cls: "prm-action-icon" }), "x");
+		dismiss.createSpan({ cls: "prm-bulk-count", text: `${paths.length} selected` });
+		dismiss.setAttribute("aria-label", `Clear the selection of ${paths.length}`);
+		dismiss.onclick = () => this.clearSelection();
 
+		// One slot, two states: "Select all" does nothing once everything listed is
+		// selected, so at that point the slot becomes the clear instead of sitting
+		// dead. That is what buys the bar a single line on a phone.
+		const listed = this.visiblePaths();
+		const allListed = listed.length > 0 && listed.every((p) => this.selection.has(p));
+		const toggle = bar.createEl("button", { cls: "prm-bulk-toggle" });
+		if (allListed) {
+			toggle.setText("Clear");
+			toggle.setAttribute("aria-label", "Clear the selection");
+			toggle.onclick = () => this.clearSelection();
+		} else {
+			toggle.setText("Select all");
+			toggle.setAttribute("aria-label", "Select every person currently listed");
+			toggle.onclick = () => {
+				for (const path of listed) this.selection.add(path);
+				this.lastClicked = null;
+				this.renderBulkBar();
+				this.syncRowSelectedClass();
+			};
+		}
+
+		// Built once and used twice: the row of buttons a wide pane shows, and the sheet
+		// a phone opens instead. Two copies of this list would drift.
+		const actions: BulkAction[] = [];
 		const act = (label: string, icon: string, onClick: () => void) => {
-			const btn = bar.createEl("button", { cls: "prm-bulk-btn" });
-			setIcon(btn.createSpan({ cls: "prm-action-icon" }), icon);
-			btn.createSpan({ text: label });
-			btn.onclick = onClick;
+			actions.push({ label, icon, run: onClick });
 		};
 
 		act("Log contact", "check", () => {
@@ -402,8 +434,21 @@ export class PrmDashboardView extends ItemView {
 			).open();
 		});
 
-		const clear = bar.createEl("button", { cls: "prm-bulk-clear", text: "Clear" });
-		clear.onclick = () => this.clearSelection();
+		// Both renderings are always built and CSS decides which is shown, so a resize
+		// across the phone/tablet boundary — which Obsidian re-evaluates live — cannot
+		// leave the bar in the wrong shape.
+		for (const a of actions) {
+			const btn = bar.createEl("button", { cls: "prm-bulk-btn" });
+			setIcon(btn.createSpan({ cls: "prm-action-icon" }), a.icon);
+			btn.createSpan({ text: a.label });
+			btn.onclick = a.run;
+		}
+
+		const more = bar.createEl("button", { cls: "prm-bulk-more" });
+		setIcon(more.createSpan({ cls: "prm-action-icon" }), "ellipsis");
+		more.createSpan({ text: "Actions" });
+		more.setAttribute("aria-label", `Actions for ${paths.length} selected`);
+		more.onclick = () => new BulkActionsModal(this.plugin, paths.length, actions).open();
 	}
 
 	private renderToolbar(): void {
